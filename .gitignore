@@ -1,0 +1,7 @@
+map/node_modules/
+map/dist/
+map/.env
+html-context/
+contexto.html
+element.html
+new-map.html
