@@ -135,18 +135,37 @@ function readData() {
 
         // Obtener informaciÃ³n de miembros
         table = document.getElementsByClassName("vis");
+        console.log("[readData] Tablas con clase 'vis' encontradas:", table.length);
+        if (!table[2]) {
+            console.error("[readData] No se encontró table[2] con clase 'vis'. Abortando.");
+            return;
+        }
         nMembers = table[2].rows.length;
+        console.log("[readData] Filas en table[2]:", nMembers);
         playerInfoList = [];
 
         for (i = 1; i < nMembers - 1; i++) {
-            let playerId = table[2].rows[i].innerHTML.split("[")[1].split("]")[0];
-            let villageAmount = table[2].rows[i].innerHTML.split("<td class=\"lit-item\">")[4].split("</td>")[0];
+            let rowHTML = table[2].rows[i].innerHTML;
+            let playerIdRaw = rowHTML.split("[")[1];
+            let villageAmountRaw = rowHTML.split("<td class=\"lit-item\">")[4];
+            if (!playerIdRaw) {
+                console.warn(`[readData] Fila ${i}: no se pudo extraer playerId. innerHTML:`, rowHTML.substring(0, 200));
+            }
+            if (!villageAmountRaw) {
+                console.warn(`[readData] Fila ${i}: no se pudo extraer villageAmount. innerHTML:`, rowHTML.substring(0, 200));
+            }
+            let playerId = playerIdRaw ? playerIdRaw.split("]")[0] : null;
+            let villageAmount = villageAmountRaw ? villageAmountRaw.split("</td>")[0] : "0";
+            console.log(`[readData] Fila ${i} -> playerId: ${playerId}, villageAmount: ${villageAmount}`);
             playerInfoList.push({ playerId, villageAmount });
         }
+        console.log("[readData] playerInfoList:", playerInfoList);
 
         mode = localStorage.troopCounterMode;
+        console.log("[readData] Modo:", mode);
         data = "Coords,Player,Points,";
         unitsList = game_data.units;
+        console.log("[readData] Unidades:", unitsList);
         for (k = 0; k < unitsList.length; k++) {
             data = data + unitsList[k] + ",";
         }
@@ -156,28 +175,40 @@ function readData() {
         let pageNumber = 1;
 
         (function loop() {
+            const currentPlayer = playerInfoList[i];
+            const url = "https://" + window.location.host + "/game.php?screen=ally&mode=" + mode + "&player_id=" + currentPlayer.playerId + "&page=" + pageNumber;
+            console.log(`[loop] Procesando jugador ${i + 1}/${playerInfoList.length} - playerId: ${currentPlayer.playerId}, página: ${pageNumber}, url: ${url}`);
+
             page = $.ajax({
-                url: "https://" + window.location.host + "/game.php?screen=ally&mode=" + mode + "&player_id=" + playerInfoList[i].playerId + "&page=" + pageNumber,
+                url: url,
                 async: false,
                 function(result) {
                     return result.responseText;
                 }
             });
+            console.log(`[loop] Respuesta HTTP status: ${page.status}`);
             document.getElementById("bar").value = (i / playerInfoList.length);
 
             const parser = new DOMParser();
             const doc = parser.parseFromString(page.responseText, 'text/html');
             const tables = doc.querySelectorAll('table.vis.w100');
+            console.log(`[loop] Tablas 'vis w100' encontradas en respuesta: ${tables.length}`);
             const troopTable = tables.length > 0 ? tables[tables.length - 1] : null;
 
-            if (troopTable) {
+            if (!troopTable) {
+                console.warn(`[loop] No se encontró tabla de tropas para playerId ${currentPlayer.playerId}. Fragmento de respuesta:`, page.responseText.substring(0, 500));
+            } else {
                 const allRows = Array.from(troopTable.querySelectorAll('tbody > tr, tr'));
                 const step = mode === 'members_defense' ? 2 : 1;
+                console.log(`[loop] Filas en tabla: ${allRows.length}, step: ${step}`);
 
                 // El primer tr (índice 0) es la cabecera, los siguientes son jugadores/aldeas
                 for (let j = 1; j < allRows.length; j += step) {
                     const tds = Array.from(allRows[j].querySelectorAll('td'));
-                    if (tds.length < 2) continue;
+                    if (tds.length < 2) {
+                        console.warn(`[loop] Fila ${j} ignorada: solo ${tds.length} celdas`);
+                        continue;
+                    }
 
                     villageData = {};
 
@@ -187,6 +218,7 @@ function readData() {
                         villageData["x"] = coordMatch[1];
                         villageData["y"] = coordMatch[2];
                     } else {
+                        console.warn(`[loop] Fila ${j}: no se encontraron coordenadas en celda 0: "${tds[0].textContent.trim()}"`);
                         villageData["x"] = "0";
                         villageData["y"] = "0";
                     }
@@ -199,6 +231,7 @@ function readData() {
                         const td = tds[k + 2];
                         villageData[unitsList[k]] = td ? td.textContent.trim() : "0";
                     }
+                    console.log(`[loop] Fila ${j} parseada:`, villageData);
 
                     // Aplicar filtros
                     filtered = true;
@@ -207,6 +240,7 @@ function readData() {
                             if ((filtres[key][k][0] === ">" && parseInt(villageData[key]) < parseInt(filtres[key][k][1])) ||
                                 (filtres[key][k][0] === "<" && parseInt(villageData[key]) > parseInt(filtres[key][k][1]))) {
                                 filtered = false;
+                                console.log(`[loop] Fila ${j} filtrada por ${key} ${filtres[key][k][0]} ${filtres[key][k][1]}`);
                                 break;
                             }
                         }
@@ -215,14 +249,15 @@ function readData() {
 
                     // AÃ±adir datos si pasa los filtros
                     if (filtered) {
-                        data += `${villageData["x"]}|${villageData["y"]},${players[playerInfoList[i].playerId]},${villageData["points"]},`;
+                        data += `${villageData["x"]}|${villageData["y"]},${players[currentPlayer.playerId]},${villageData["points"]},`;
                         data += unitsList.map(unit => villageData[unit]).join(",") + "\n";
                     }
                 }
             }
             i++;
 
-            if (troopTable !== null && playerInfoList[i].villageAmount / 1000 > pageNumber) {
+            if (troopTable !== null && playerInfoList[i] && playerInfoList[i].villageAmount / 1000 > pageNumber) {
+                console.log(`[loop] Más páginas para playerId ${playerInfoList[i].playerId}: página ${pageNumber + 1}`);
                 i--;
                 pageNumber++;
             } else {
@@ -232,6 +267,7 @@ function readData() {
             if (i < playerInfoList.length) {
                 setTimeout(loop, 200);
             } else {
+                console.log("[loop] Todos los jugadores procesados. Mostrando datos.");
                 showData(data, mode);
             }
         })();
