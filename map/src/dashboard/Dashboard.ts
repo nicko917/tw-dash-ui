@@ -231,6 +231,12 @@ export class Dashboard {
 
         Dialog.show("Datos de jugadores", html);
 
+        const popup = document.getElementById('popup_box_Datos de jugadores');
+        if (popup) {
+            popup.style.width = '1340px';
+            popup.style.maxWidth = '1340px';
+        }
+
         setTimeout(() => {
             const downloadBtn = document.getElementById('tw-dash-download');
             if (downloadBtn) {

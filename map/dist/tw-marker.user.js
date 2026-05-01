@@ -759,7 +759,8 @@
             const bracketSplit = rowHtml.split("[");
             const playerId = bracketSplit[1] ? bracketSplit[1].split("]")[0] : null;
             const litItemSplit = rowHtml.split('<td class="lit-item">');
-            const villageAmountRaw = litItemSplit[4] ? litItemSplit[4].split("</td>")[0].trim() : "1";
+            const villageAmountCell = litItemSplit[4];
+            const villageAmountRaw = villageAmountCell ? (villageAmountCell.split("</td>")[0] ?? "").trim() : "1";
             const villageAmount = parseInt(villageAmountRaw, 10) || 1;
             if (!playerId || isNaN(parseInt(playerId, 10))) {
               console.warn(`[Scraper] Fila ${i}: no se pudo extraer playerId. HTML:`, rowHtml.substring(0, 200));
@@ -853,8 +854,8 @@
                     const textContent = row.textContent || "";
                     const coordMatch = textContent.match(/\((\d{1,3})\|(\d{1,3})\)/);
                     if (coordMatch) {
-                      villageData["x"] = coordMatch[1];
-                      villageData["y"] = coordMatch[2];
+                      villageData["x"] = coordMatch[1] ?? "0";
+                      villageData["y"] = coordMatch[2] ?? "0";
                     } else {
                       console.warn(`[Scraper] Fila ${j}: sin coordenadas. Texto: "${textContent.trim().substring(0, 80)}"`);
                       villageData["x"] = "0";
@@ -909,8 +910,10 @@
                     }
                     let passedFilter = true;
                     for (const key in this.filters) {
-                      for (let k = 0; k < this.filters[key].length; k++) {
-                        const filterItem = this.filters[key][k];
+                      const filterList = this.filters[key];
+                      if (!filterList) continue;
+                      for (let k = 0; k < filterList.length; k++) {
+                        const filterItem = filterList[k];
                         if (!filterItem) continue;
                         const operator = filterItem[0];
                         const filterVal = parseInt(filterItem[1], 10);
@@ -932,9 +935,9 @@
                       csvData += row2;
                       if (currentPlayerData) {
                         currentPlayerData.villages.push({
-                          x: villageData["x"],
-                          y: villageData["y"],
-                          points: villageData["points"],
+                          x: villageData["x"] ?? "0",
+                          y: villageData["y"] ?? "0",
+                          points: villageData["points"] || "0",
                           values: headersList.reduce((acc, key) => {
                             acc[key] = villageData[key] || "0";
                             return acc;
@@ -1154,7 +1157,7 @@
             (player) => `<option value="${player.playerId}">${player.playerName} (${player.villages.length})</option>`
           ).join("");
           const html = `
-            <div>
+            <div style="max-width: 1340px; width: 100%;">
                 <p><h2>Datos de todos los jugadores</h2></p>
                 <p>Modo seleccionado: ${result.mode}</p>
                 <p>Jugadores encontrados: ${result.players.length}</p>
@@ -1178,6 +1181,11 @@
             </div>
         `;
           Dialog.show("Datos de jugadores", html);
+          const popup = document.getElementById("popup_box_Datos de jugadores");
+          if (popup) {
+            popup.style.width = "1340px";
+            popup.style.maxWidth = "1340px";
+          }
           setTimeout(() => {
             const downloadBtn = document.getElementById("tw-dash-download");
             if (downloadBtn) {
@@ -1197,8 +1205,11 @@
                 this.renderPlayerDetails(playerSelect.value, result);
               });
               if (result.players.length > 0) {
-                playerSelect.selectedIndex = 1;
-                this.renderPlayerDetails(result.players[0].playerId, result);
+                const firstPlayer = result.players[0];
+                if (firstPlayer) {
+                  playerSelect.selectedIndex = 1;
+                  this.renderPlayerDetails(firstPlayer.playerId, result);
+                }
               }
             }
           }, 100);
