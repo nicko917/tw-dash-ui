@@ -982,6 +982,8 @@
         scraper;
         mode = "members_troops";
         lastReadResult = null;
+        unitIconTemplate = null;
+        unitIconTemplateResolved = false;
         constructor() {
           this.scraper = new Scraper();
           this.initMode();
@@ -1183,16 +1185,32 @@
           Dialog.show("Datos de jugadores", html);
           const enforcePopupWidth = () => {
             const popup = document.getElementById("popup_box_Datos de jugadores");
-            if (!popup) return;
+            if (!popup) return false;
             popup.style.setProperty("width", "1340px", "important");
             popup.style.setProperty("max-width", "1340px", "important");
             popup.style.setProperty("min-width", "1340px", "important");
+            const content = popup.querySelector(".popup_box_content");
+            if (content) {
+              content.style.setProperty("width", "1340px", "important");
+              content.style.setProperty("max-width", "1340px", "important");
+              content.style.setProperty("min-width", "1340px", "important");
+              const innerWrapper = content.firstElementChild;
+              if (innerWrapper) {
+                innerWrapper.style.setProperty("width", "1340px", "important");
+                innerWrapper.style.setProperty("max-width", "1340px", "important");
+                innerWrapper.style.setProperty("min-width", "1340px", "important");
+              }
+            }
+            return true;
           };
           enforcePopupWidth();
           const popupWidthInterval = window.setInterval(enforcePopupWidth, 60);
-          window.setTimeout(() => {
-            window.clearInterval(popupWidthInterval);
-          }, 8e3);
+          const cleanupInterval = window.setInterval(() => {
+            if (!document.getElementById("popup_box_Datos de jugadores")) {
+              window.clearInterval(popupWidthInterval);
+              window.clearInterval(cleanupInterval);
+            }
+          }, 300);
           setTimeout(() => {
             const downloadBtn = document.getElementById("tw-dash-download");
             if (downloadBtn) {
@@ -1262,12 +1280,49 @@
             </table>
         `;
         }
+        getUnitIconTemplate() {
+          if (this.unitIconTemplateResolved) {
+            return this.unitIconTemplate;
+          }
+          const anyUnitIcon = document.querySelector('img[src*="/graphic/unit/unit_"]');
+          if (!anyUnitIcon || !anyUnitIcon.src) {
+            this.unitIconTemplateResolved = true;
+            this.unitIconTemplate = null;
+            return null;
+          }
+          const match = anyUnitIcon.src.match(/^(.*\/unit_)\w+(\.(?:webp|png|gif))(?:\?.*)?$/i);
+          if (!match) {
+            this.unitIconTemplateResolved = true;
+            this.unitIconTemplate = null;
+            return null;
+          }
+          const prefix = match[1];
+          const suffix = match[2];
+          if (!prefix || !suffix) {
+            this.unitIconTemplateResolved = true;
+            this.unitIconTemplate = null;
+            return null;
+          }
+          this.unitIconTemplate = { prefix, suffix };
+          this.unitIconTemplateResolved = true;
+          return this.unitIconTemplate;
+        }
+        getUnitIconKey(unitKey) {
+          const aliases = {
+            marcher: "marcher",
+            militia: "militia"
+          };
+          return aliases[unitKey] || unitKey;
+        }
         getUnitIconSrc(unitKey) {
-          const existingIcon = document.querySelector(`img[src*="/unit_${unitKey}."]`);
+          const resolvedKey = this.getUnitIconKey(unitKey);
+          const existingIcon = document.querySelector(`img[src*="unit_${resolvedKey}."]`);
           if (existingIcon && existingIcon.src) {
             return existingIcon.src;
           }
-          return null;
+          const template = this.getUnitIconTemplate();
+          if (!template) return null;
+          return `${template.prefix}${resolvedKey}${template.suffix}`;
         }
         renderMetricHeaderCell(key, label) {
           const iconSrc = this.getUnitIconSrc(key);

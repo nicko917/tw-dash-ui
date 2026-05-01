@@ -8,6 +8,8 @@ export class Dashboard {
     private scraper: Scraper;
     private mode: string = 'members_troops';
     private lastReadResult: ReadResult | null = null;
+    private unitIconTemplate: { prefix: string; suffix: string } | null = null;
+    private unitIconTemplateResolved = false;
 
     constructor() {
         this.scraper = new Scraper();
@@ -233,18 +235,36 @@ export class Dashboard {
 
         const enforcePopupWidth = () => {
             const popup = document.getElementById('popup_box_Datos de jugadores');
-            if (!popup) return;
+            if (!popup) return false;
             popup.style.setProperty('width', '1340px', 'important');
             popup.style.setProperty('max-width', '1340px', 'important');
             popup.style.setProperty('min-width', '1340px', 'important');
+
+            const content = popup.querySelector<HTMLElement>('.popup_box_content');
+            if (content) {
+                content.style.setProperty('width', '1340px', 'important');
+                content.style.setProperty('max-width', '1340px', 'important');
+                content.style.setProperty('min-width', '1340px', 'important');
+
+                const innerWrapper = content.firstElementChild as HTMLElement | null;
+                if (innerWrapper) {
+                    innerWrapper.style.setProperty('width', '1340px', 'important');
+                    innerWrapper.style.setProperty('max-width', '1340px', 'important');
+                    innerWrapper.style.setProperty('min-width', '1340px', 'important');
+                }
+            }
+            return true;
         };
 
-        // Dialog puede recalcular width varias veces; se refuerza durante unos segundos.
+        // Dialog puede recalcular width varias veces; se refuerza mientras el popup exista.
         enforcePopupWidth();
         const popupWidthInterval = window.setInterval(enforcePopupWidth, 60);
-        window.setTimeout(() => {
-            window.clearInterval(popupWidthInterval);
-        }, 8000);
+        const cleanupInterval = window.setInterval(() => {
+            if (!document.getElementById('popup_box_Datos de jugadores')) {
+                window.clearInterval(popupWidthInterval);
+                window.clearInterval(cleanupInterval);
+            }
+        }, 300);
 
         setTimeout(() => {
             const downloadBtn = document.getElementById('tw-dash-download');
@@ -324,12 +344,57 @@ export class Dashboard {
         `;
     }
 
+    private getUnitIconTemplate(): { prefix: string; suffix: string } | null {
+        if (this.unitIconTemplateResolved) {
+            return this.unitIconTemplate;
+        }
+
+        const anyUnitIcon = document.querySelector<HTMLImageElement>('img[src*="/graphic/unit/unit_"]');
+        if (!anyUnitIcon || !anyUnitIcon.src) {
+            this.unitIconTemplateResolved = true;
+            this.unitIconTemplate = null;
+            return null;
+        }
+
+        const match = anyUnitIcon.src.match(/^(.*\/unit_)\w+(\.(?:webp|png|gif))(?:\?.*)?$/i);
+        if (!match) {
+            this.unitIconTemplateResolved = true;
+            this.unitIconTemplate = null;
+            return null;
+        }
+
+        const prefix = match[1];
+        const suffix = match[2];
+        if (!prefix || !suffix) {
+            this.unitIconTemplateResolved = true;
+            this.unitIconTemplate = null;
+            return null;
+        }
+
+        this.unitIconTemplate = { prefix, suffix };
+        this.unitIconTemplateResolved = true;
+        return this.unitIconTemplate;
+    }
+
+    private getUnitIconKey(unitKey: string): string {
+        const aliases: Record<string, string> = {
+            marcher: 'marcher',
+            militia: 'militia',
+        };
+        return aliases[unitKey] || unitKey;
+    }
+
     private getUnitIconSrc(unitKey: string): string | null {
-        const existingIcon = document.querySelector<HTMLImageElement>(`img[src*="/unit_${unitKey}."]`);
+        const resolvedKey = this.getUnitIconKey(unitKey);
+        const existingIcon = document.querySelector<HTMLImageElement>(`img[src*="unit_${resolvedKey}."]`);
         if (existingIcon && existingIcon.src) {
             return existingIcon.src;
         }
-        return null;
+
+        const template = this.getUnitIconTemplate();
+        if (!template) return null;
+
+        return `${template.prefix}${resolvedKey}${template.suffix}`;
     }
 
     private renderMetricHeaderCell(key: string, label: string): string {
