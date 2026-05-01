@@ -1,4 +1,4 @@
-import { Scraper } from './Scraper';
+import { Scraper, ReadResult } from './Scraper';
 
 declare const game_data: any;
 declare const Dialog: any;
@@ -6,6 +6,7 @@ declare const UI: any;
 export class Dashboard {
     private scraper: Scraper;
     private mode: string = 'members_troops';
+    private lastReadResult: ReadResult | null = null;
 
     constructor() {
         this.scraper = new Scraper();
@@ -79,7 +80,10 @@ export class Dashboard {
                     </p>
                 </fieldset>
                 <div>
-                    <p><input type="button" class="btn evt-confirm-btn btn-confirm-yes" id="tw-dash-run" value="Extraer datos"></p>
+                    <p>
+                        <input type="button" class="btn evt-confirm-btn btn-confirm-yes" id="tw-dash-run" value="Extraer datos CSV">
+                        <input type="button" class="btn evt-confirm-btn btn-confirm-yes" id="tw-dash-read-all" value="Leer todos los datos">
+                    </p>
                 </div>
             </div>
         `;
@@ -132,13 +136,20 @@ export class Dashboard {
             const runBtn = document.getElementById('tw-dash-run');
             if (runBtn) {
                 runBtn.addEventListener('click', () => {
-                    this.startScraping();
+                    this.startScraping('csv');
+                });
+            }
+
+            const readAllBtn = document.getElementById('tw-dash-read-all');
+            if (readAllBtn) {
+                readAllBtn.addEventListener('click', () => {
+                    this.startScraping('ui');
                 });
             }
         }, 100);
     }
 
-    private startScraping() {
+    private startScraping(displayMode: 'csv' | 'ui') {
         const html = '<label> Extrayendo... </label><progress id="tw-dash-bar" max="1" value="0" style="width: 100%;"></progress>';
         Dialog.show("Progreso", html);
 
@@ -148,8 +159,13 @@ export class Dashboard {
                 const bar = document.getElementById('tw-dash-bar') as HTMLProgressElement;
                 if (bar) bar.value = progress;
             },
-            (csvData: string) => {
-                this.showData(csvData);
+            (result: ReadResult) => {
+                this.lastReadResult = result;
+                if (displayMode === 'csv') {
+                    this.showData(result.csvData);
+                } else {
+                    this.showPlayerDashboard(result);
+                }
             }
         );
     }
@@ -180,6 +196,109 @@ export class Dashboard {
                 });
             }
         }, 100);
+    }
+
+    private showPlayerDashboard(result: ReadResult) {
+        const playerOptions = result.players.map(player =>
+            `<option value="${player.playerId}">${player.playerName} (${player.villages.length})</option>`
+        ).join('');
+
+        const html = `
+            <div>
+                <p><h2>Datos de todos los jugadores</h2></p>
+                <p>Modo seleccionado: ${result.mode}</p>
+                <p>Jugadores encontrados: ${result.players.length}</p>
+                <p>
+                    <input type="button" class="btn evt-confirm-btn btn-confirm-yes" id="tw-dash-download" value="Descargar como CSV">
+                    <input type="button" class="btn evt-confirm-btn btn-confirm-no" id="tw-dash-back" value="Volver al menú principal">
+                </p>
+                <div style="display: flex; gap: 12px; align-items: flex-start;">
+                    <div style="flex: 0 0 260px; max-height: 500px; overflow-y: auto; padding: 8px; border: 1px solid #888; background: #f8f8f8;">
+                        <div style="font-weight: bold; margin-bottom: 8px;">Selecciona jugador</div>
+                        <select id="tw-dash-player-select" style="width: 100%; margin-bottom: 12px;">
+                            <option value="">-- Elige un jugador --</option>
+                            ${playerOptions}
+                        </select>
+                        <div id="tw-dash-player-sidebar"></div>
+                    </div>
+                    <div style="flex: 1; max-height: 500px; overflow: auto;">
+                        <div id="tw-dash-player-details"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        Dialog.show("Datos de jugadores", html);
+
+        setTimeout(() => {
+            const downloadBtn = document.getElementById('tw-dash-download');
+            if (downloadBtn) {
+                downloadBtn.addEventListener('click', () => {
+                    this.downloadCSV('tribe_info', result.csvData);
+                });
+            }
+
+            const backBtn = document.getElementById('tw-dash-back');
+            if (backBtn) {
+                backBtn.addEventListener('click', () => {
+                    this.render();
+                });
+            }
+
+            const playerSelect = document.getElementById('tw-dash-player-select') as HTMLSelectElement;
+            if (playerSelect) {
+                playerSelect.addEventListener('change', () => {
+                    this.renderPlayerDetails(playerSelect.value, result);
+                });
+                if (result.players.length > 0) {
+                    playerSelect.selectedIndex = 1;
+                    this.renderPlayerDetails(result.players[0].playerId, result);
+                }
+            }
+        }, 100);
+    }
+
+    private renderPlayerDetails(playerId: string, result: ReadResult) {
+        const detailsContainer = document.getElementById('tw-dash-player-details');
+        const sidebar = document.getElementById('tw-dash-player-sidebar');
+        if (!detailsContainer || !sidebar) return;
+
+        const player = result.players.find(p => p.playerId === playerId);
+        if (!player) {
+            detailsContainer.innerHTML = '<p>Selecciona un jugador para ver sus datos.</p>';
+            sidebar.innerHTML = '';
+            return;
+        }
+
+        const totalVillages = player.villages.length;
+        const sidebarHtml = `
+            <div style="font-weight: bold; margin-bottom: 8px;">${player.playerName}</div>
+            <div>Player ID: ${player.playerId}</div>
+            <div>Aldeas encontradas: ${totalVillages}</div>
+        `;
+        sidebar.innerHTML = sidebarHtml;
+
+        const headers = ['Coordenadas', 'Puntos', ...result.displayHeadersList];
+        const headerRow = headers.map(h => `<th style="padding: 4px; border: 1px solid #ccc;">${h}</th>`).join('');
+
+        const tableRows = player.villages.map(village => {
+            const values = result.headersList.map(key => `<td style="padding: 4px; border: 1px solid #ccc; text-align: right;">${village.values[key] || '0'}</td>`).join('');
+            return `
+                <tr>
+                    <td style="padding: 4px; border: 1px solid #ccc;">${village.x}|${village.y}</td>
+                    <td style="padding: 4px; border: 1px solid #ccc; text-align: right;">${village.points}</td>
+                    ${values}
+                </tr>
+            `;
+        }).join('');
+
+        detailsContainer.innerHTML = `
+            <div style="margin-bottom: 8px; font-weight: bold;">Datos de ${player.playerName}</div>
+            <table class="vis" style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                <thead><tr>${headerRow}</tr></thead>
+                <tbody>${tableRows || '<tr><td colspan="' + headers.length + '" style="padding: 8px; border: 1px solid #ccc; text-align: center;">No hay datos visibles.</td></tr>'}</tbody>
+            </table>
+        `;
     }
 
     private downloadCSV(filename: string, text: string) {

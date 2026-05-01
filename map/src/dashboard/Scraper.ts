@@ -3,6 +3,27 @@ declare const $: any;
 declare const UI: any;
 declare const Dialog: any;
 
+export interface VillageData {
+    x: string;
+    y: string;
+    points: string;
+    values: Record<string, string>;
+}
+
+export interface PlayerData {
+    playerId: string;
+    playerName: string;
+    villages: VillageData[];
+}
+
+export interface ReadResult {
+    csvData: string;
+    players: PlayerData[];
+    headersList: string[];
+    displayHeadersList: string[];
+    mode: string;
+}
+
 export class Scraper {
     private players: Record<string, string> = {};
     private filters: Record<string, [string, string][]> = {};
@@ -93,7 +114,7 @@ export class Scraper {
         return playerDict;
     }
 
-    public readData(mode: string, onProgress: (progress: number) => void, onComplete: (csvData: string) => void) {
+    public readData(mode: string, onProgress: (progress: number) => void, onComplete: (result: ReadResult) => void) {
         if (game_data.mode !== "members" && game_data.mode !== "members_troops" && game_data.mode !== "members_defense" && game_data.mode !== "members_buildings") {
             UI.ErrorMessage("You must be on the Ally Members page to run this.", 3000);
             return;
@@ -163,15 +184,25 @@ export class Scraper {
         }
         csvData += "\n";
 
+        const readResult: ReadResult = {
+            csvData,
+            players: [],
+            headersList,
+            displayHeadersList,
+            mode,
+        };
+
         const players = this.getPlayerDict();
         let currentIndex = 0;
         let pageNumber = 1;
+        let currentPlayerData: PlayerData | null = null;
 
         const loop = () => {
             if (currentIndex >= playerInfoList.length) {
                 console.log('[Scraper] Todos los jugadores procesados. Generando CSV.');
+                readResult.csvData = csvData;
                 onProgress(1);
-                onComplete(csvData);
+                onComplete(readResult);
                 return;
             }
 
@@ -180,6 +211,15 @@ export class Scraper {
                 currentIndex++;
                 setTimeout(loop, 200);
                 return;
+            }
+
+            if (!currentPlayerData || currentPlayerData.playerId !== currentPlayer.playerId) {
+                currentPlayerData = {
+                    playerId: currentPlayer.playerId,
+                    playerName: players[currentPlayer.playerId] || 'Unknown',
+                    villages: []
+                };
+                readResult.players.push(currentPlayerData);
             }
 
             const url = `https://${window.location.host}/game.php?screen=ally&mode=${mode}&player_id=${currentPlayer.playerId}&page=${pageNumber}`;
@@ -311,6 +351,18 @@ export class Scraper {
                                     headersList.map(item => item ? (villageData[item] || "0") : "0").join(",") + "\n";
                                 console.log(`[Scraper] Fila añadida al CSV:`, row.trim());
                                 csvData += row;
+
+                                if (currentPlayerData) {
+                                    currentPlayerData.villages.push({
+                                        x: villageData["x"],
+                                        y: villageData["y"],
+                                        points: villageData["points"],
+                                        values: headersList.reduce((acc: Record<string, string>, key) => {
+                                            acc[key] = villageData[key] || "0";
+                                            return acc;
+                                        }, {})
+                                    });
+                                }
                             } else {
                                 console.log(`[Scraper] Fila ${j} descartada por filtros. villageData:`, villageData);
                             }
