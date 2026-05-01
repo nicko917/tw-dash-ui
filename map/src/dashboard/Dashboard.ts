@@ -231,41 +231,20 @@ export class Dashboard {
 
         Dialog.show("Datos de jugadores", html);
 
-        const applyPopupWidth = (popup: HTMLElement) => {
+        const enforcePopupWidth = () => {
+            const popup = document.getElementById('popup_box_Datos de jugadores');
+            if (!popup) return;
             popup.style.setProperty('width', '1340px', 'important');
             popup.style.setProperty('max-width', '1340px', 'important');
+            popup.style.setProperty('min-width', '1340px', 'important');
         };
 
-        const setupPopupWidthWatcher = (popup: HTMLElement) => {
-            applyPopupWidth(popup);
-
-            const observer = new MutationObserver((mutations) => {
-                for (const mutation of mutations) {
-                    if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-                        applyPopupWidth(popup);
-                    }
-                }
-            });
-
-            observer.observe(popup, { attributes: true, attributeFilter: ['style'] });
-
-            const disconnectWatcher = () => {
-                if (!document.body.contains(popup)) {
-                    observer.disconnect();
-                    window.removeEventListener('scroll', disconnectWatcher);
-                }
-            };
-
-            window.addEventListener('scroll', disconnectWatcher);
-        };
-
-        const popupWaitInterval = window.setInterval(() => {
-            const popup = document.getElementById('popup_box_Datos de jugadores');
-            if (popup) {
-                setupPopupWidthWatcher(popup);
-                window.clearInterval(popupWaitInterval);
-            }
-        }, 50);
+        // Dialog puede recalcular width varias veces; se refuerza durante unos segundos.
+        enforcePopupWidth();
+        const popupWidthInterval = window.setInterval(enforcePopupWidth, 60);
+        window.setTimeout(() => {
+            window.clearInterval(popupWidthInterval);
+        }, 8000);
 
         setTimeout(() => {
             const downloadBtn = document.getElementById('tw-dash-download');
@@ -318,8 +297,12 @@ export class Dashboard {
         `;
         sidebar.innerHTML = sidebarHtml;
 
-        const headers = ['Coordenadas', 'Puntos', ...result.displayHeadersList];
-        const headerRow = headers.map(h => `<th style="padding: 4px; border: 1px solid #ccc;">${h}</th>`).join('');
+        const headerCells = [
+            '<th style="padding: 4px; border: 1px solid #ccc;">Coordenadas</th>',
+            '<th style="padding: 4px; border: 1px solid #ccc;">Puntos</th>',
+            ...result.headersList.map((key, idx) => this.renderMetricHeaderCell(key, result.displayHeadersList[idx] || key)),
+        ].join('');
+        const headersCount = 2 + result.headersList.length;
 
         const tableRows = player.villages.map(village => {
             const values = result.headersList.map(key => `<td style="padding: 4px; border: 1px solid #ccc; text-align: right;">${village.values[key] || '0'}</td>`).join('');
@@ -335,10 +318,26 @@ export class Dashboard {
         detailsContainer.innerHTML = `
             <div style="margin-bottom: 8px; font-weight: bold;">Datos de ${player.playerName}</div>
             <table class="vis" style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                <thead><tr>${headerRow}</tr></thead>
-                <tbody>${tableRows || '<tr><td colspan="' + headers.length + '" style="padding: 8px; border: 1px solid #ccc; text-align: center;">No hay datos visibles.</td></tr>'}</tbody>
+                <thead><tr>${headerCells}</tr></thead>
+                <tbody>${tableRows || '<tr><td colspan="' + headersCount + '" style="padding: 8px; border: 1px solid #ccc; text-align: center;">No hay datos visibles.</td></tr>'}</tbody>
             </table>
         `;
+    }
+
+    private getUnitIconSrc(unitKey: string): string | null {
+        const existingIcon = document.querySelector<HTMLImageElement>(`img[src*="/unit_${unitKey}."]`);
+        if (existingIcon && existingIcon.src) {
+            return existingIcon.src;
+        }
+        return null;
+    }
+
+    private renderMetricHeaderCell(key: string, label: string): string {
+        const iconSrc = this.getUnitIconSrc(key);
+        if (iconSrc) {
+            return `<th style="padding: 4px; border: 1px solid #ccc; text-align: center;"><img src="${iconSrc}" alt="${label}" data-title="${label}" style="vertical-align: middle;"></th>`;
+        }
+        return `<th style="padding: 4px; border: 1px solid #ccc;">${label}</th>`;
     }
 
     private downloadCSV(filename: string, text: string) {
