@@ -742,20 +742,24 @@
             return;
           }
           const tables = document.getElementsByClassName("vis");
+          console.log(`[Scraper] Tablas con clase 'vis' en el DOM: ${tables.length}`);
           let membersTable = null;
           for (let i = 0; i < tables.length; i++) {
             const table = tables[i];
             if (table && table.innerHTML && table.innerHTML.includes("player_id=")) {
               membersTable = table;
+              console.log(`[Scraper] Tabla de miembros encontrada en \xEDndice ${i}`);
               break;
             }
           }
           if (!membersTable) {
+            console.error("[Scraper] No se encontr\xF3 ninguna tabla con player_id=. Tablas disponibles:", Array.from(tables).map((t, i) => `[${i}] ${t.className}`));
             UI.ErrorMessage("Could not find members table.", 3e3);
             return;
           }
           const playerInfoList = [];
           const rows = membersTable.rows;
+          console.log(`[Scraper] Filas en la tabla de miembros: ${rows.length}`);
           for (let i = 1; i < rows.length - 1; i++) {
             const rowEl = rows[i];
             if (!rowEl) continue;
@@ -774,13 +778,18 @@
                   }
                 }
               }
+              console.log(`[Scraper] Fila ${i} -> playerId: ${playerId}, villageAmount: ${villageAmount}`);
               playerInfoList.push({ playerId, villageAmount });
+            } else {
+              console.warn(`[Scraper] Fila ${i}: no se encontr\xF3 player_id. HTML:`, rowHtml.substring(0, 200));
             }
           }
           if (playerInfoList.length === 0) {
+            console.error("[Scraper] playerInfoList vac\xEDo. No se encontraron miembros.");
             UI.ErrorMessage("No members found.", 3e3);
             return;
           }
+          console.log(`[Scraper] Total jugadores a procesar: ${playerInfoList.length}`, playerInfoList);
           let csvData = "Coords,Player,Points,";
           let headersList = [];
           let displayHeadersList = [];
@@ -800,6 +809,7 @@
           let pageNumber = 1;
           const loop = () => {
             if (currentIndex >= playerInfoList.length) {
+              console.log("[Scraper] Todos los jugadores procesados. Generando CSV.");
               onProgress(1);
               onComplete(csvData);
               return;
@@ -811,6 +821,7 @@
               return;
             }
             const url = `https://${window.location.host}/game.php?screen=ally&mode=${mode}&player_id=${currentPlayer.playerId}&page=${pageNumber}`;
+            console.log(`[Scraper] [${currentIndex + 1}/${playerInfoList.length}] Fetching playerId=${currentPlayer.playerId}, p\xE1gina=${pageNumber} -> ${url}`);
             $.ajax({
               url,
               success: (result) => {
@@ -818,9 +829,13 @@
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(result, "text/html");
                 const visTables = doc.querySelectorAll("table.vis.w100");
+                console.log(`[Scraper] playerId=${currentPlayer.playerId}: tablas 'vis w100' en respuesta: ${visTables.length}`);
                 let dataTable = null;
                 if (visTables.length > 0) {
                   dataTable = visTables[visTables.length - 1];
+                }
+                if (!dataTable) {
+                  console.warn(`[Scraper] playerId=${currentPlayer.playerId}: no se encontr\xF3 tabla de datos. Fragmento HTML:`, result.substring(0, 600));
                 }
                 if (dataTable) {
                   const trs = dataTable.querySelectorAll("tr");
@@ -829,17 +844,18 @@
                   if (trs.length > 1 && trs[1] && trs[1].querySelector("th")) {
                     startRow = 2;
                   }
+                  console.log(`[Scraper] playerId=${currentPlayer.playerId}: filas en tabla=${trs.length}, startRow=${startRow}, step=${step}`);
                   for (let j = startRow; j + step - 1 < trs.length; j += step) {
                     const row = trs[j];
                     if (!row || row.querySelector("th")) continue;
                     let villageData = {};
                     const textContent = row.textContent || "";
-                    const coordMatch = textContent.match(/\((\d{1,3}\|\d{1,3})\)/);
-                    if (coordMatch && coordMatch[1]) {
-                      const splitCoords = coordMatch[1].split("|");
-                      villageData["x"] = splitCoords[0] || "0";
-                      villageData["y"] = splitCoords[1] || "0";
+                    const coordMatch = textContent.match(/\((\d{1,3})\|(\d{1,3})\)/);
+                    if (coordMatch) {
+                      villageData["x"] = coordMatch[1];
+                      villageData["y"] = coordMatch[2];
                     } else {
+                      console.warn(`[Scraper] Fila ${j}: sin coordenadas. Texto: "${textContent.trim().substring(0, 80)}"`);
                       villageData["x"] = "0";
                       villageData["y"] = "0";
                     }
@@ -910,12 +926,16 @@
                     }
                     if (passedFilter) {
                       const playerName = players[currentPlayer.playerId] || "Unknown";
-                      csvData += `${villageData["x"]}|${villageData["y"]},${playerName},${villageData["points"]},`;
-                      csvData += headersList.map((item) => item ? villageData[item] || "0" : "0").join(",") + "\n";
+                      const row2 = `${villageData["x"]}|${villageData["y"]},${playerName},${villageData["points"]},` + headersList.map((item) => item ? villageData[item] || "0" : "0").join(",") + "\n";
+                      console.log(`[Scraper] Fila a\xF1adida al CSV:`, row2.trim());
+                      csvData += row2;
+                    } else {
+                      console.log(`[Scraper] Fila ${j} descartada por filtros. villageData:`, villageData);
                     }
                   }
                 }
                 if (currentPlayer.villageAmount / 1e3 > pageNumber) {
+                  console.log(`[Scraper] playerId=${currentPlayer.playerId}: hay m\xE1s p\xE1ginas (villageAmount=${currentPlayer.villageAmount}), cargando p\xE1gina ${pageNumber + 1}`);
                   pageNumber++;
                 } else {
                   currentIndex++;
@@ -923,7 +943,8 @@
                 }
                 setTimeout(loop, 200);
               },
-              error: () => {
+              error: (_jqXHR, textStatus, errorThrown) => {
+                console.error(`[Scraper] Error AJAX para playerId=${currentPlayer.playerId}, p\xE1gina=${pageNumber}: ${textStatus} - ${errorThrown}`);
                 currentIndex++;
                 pageNumber = 1;
                 setTimeout(loop, 200);

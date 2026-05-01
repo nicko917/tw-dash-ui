@@ -100,23 +100,27 @@ export class Scraper {
         }
 
         const tables = document.getElementsByClassName("vis");
+        console.log(`[Scraper] Tablas con clase 'vis' en el DOM: ${tables.length}`);
         let membersTable: HTMLTableElement | null = null;
         
         for (let i = 0; i < tables.length; i++) {
             const table = tables[i];
             if (table && table.innerHTML && table.innerHTML.includes('player_id=')) {
                 membersTable = table as HTMLTableElement;
+                console.log(`[Scraper] Tabla de miembros encontrada en índice ${i}`);
                 break;
             }
         }
 
         if (!membersTable) {
+            console.error('[Scraper] No se encontró ninguna tabla con player_id=. Tablas disponibles:', Array.from(tables).map((t, i) => `[${i}] ${t.className}`));
             UI.ErrorMessage("Could not find members table.", 3000);
             return;
         }
 
         const playerInfoList: { playerId: string, villageAmount: number }[] = [];
         const rows = membersTable.rows;
+        console.log(`[Scraper] Filas en la tabla de miembros: ${rows.length}`);
 
         for (let i = 1; i < rows.length - 1; i++) {
             const rowEl = rows[i];
@@ -140,14 +144,19 @@ export class Scraper {
                     }
                 }
 
+                console.log(`[Scraper] Fila ${i} -> playerId: ${playerId}, villageAmount: ${villageAmount}`);
                 playerInfoList.push({ playerId, villageAmount });
+            } else {
+                console.warn(`[Scraper] Fila ${i}: no se encontró player_id. HTML:`, rowHtml.substring(0, 200));
             }
         }
 
         if (playerInfoList.length === 0) {
+            console.error('[Scraper] playerInfoList vacío. No se encontraron miembros.');
             UI.ErrorMessage("No members found.", 3000);
             return;
         }
+        console.log(`[Scraper] Total jugadores a procesar: ${playerInfoList.length}`, playerInfoList);
 
         let csvData = "Coords,Player,Points,";
         
@@ -172,6 +181,7 @@ export class Scraper {
 
         const loop = () => {
             if (currentIndex >= playerInfoList.length) {
+                console.log('[Scraper] Todos los jugadores procesados. Generando CSV.');
                 onProgress(1);
                 onComplete(csvData);
                 return;
@@ -185,6 +195,7 @@ export class Scraper {
             }
 
             const url = `https://${window.location.host}/game.php?screen=ally&mode=${mode}&player_id=${currentPlayer.playerId}&page=${pageNumber}`;
+            console.log(`[Scraper] [${currentIndex + 1}/${playerInfoList.length}] Fetching playerId=${currentPlayer.playerId}, página=${pageNumber} -> ${url}`);
 
             $.ajax({
                 url: url,
@@ -195,10 +206,15 @@ export class Scraper {
                     const doc = parser.parseFromString(result, "text/html");
                     
                     const visTables = doc.querySelectorAll('table.vis.w100');
+                    console.log(`[Scraper] playerId=${currentPlayer.playerId}: tablas 'vis w100' en respuesta: ${visTables.length}`);
                     let dataTable: HTMLTableElement | null = null;
                     
                     if (visTables.length > 0) {
                         dataTable = visTables[visTables.length - 1] as HTMLTableElement;
+                    }
+
+                    if (!dataTable) {
+                        console.warn(`[Scraper] playerId=${currentPlayer.playerId}: no se encontró tabla de datos. Fragmento HTML:`, result.substring(0, 600));
                     }
 
                     if (dataTable) {
@@ -210,6 +226,7 @@ export class Scraper {
                         if (trs.length > 1 && trs[1] && trs[1].querySelector('th')) {
                             startRow = 2;
                         }
+                        console.log(`[Scraper] playerId=${currentPlayer.playerId}: filas en tabla=${trs.length}, startRow=${startRow}, step=${step}`);
 
                         for (let j = startRow; j + step - 1 < trs.length; j += step) {
                             const row = trs[j];
@@ -218,12 +235,12 @@ export class Scraper {
                             let villageData: Record<string, string> = {};
 
                             const textContent = row.textContent || "";
-                            const coordMatch = textContent.match(/\((\d{1,3}\|\d{1,3})\)/);
-                            if (coordMatch && coordMatch[1]) {
-                                const splitCoords = coordMatch[1].split("|");
-                                villageData["x"] = splitCoords[0] || "0";
-                                villageData["y"] = splitCoords[1] || "0";
+                            const coordMatch = textContent.match(/\((\d{1,3})\|(\d{1,3})\)/);
+                            if (coordMatch) {
+                                villageData["x"] = coordMatch[1];
+                                villageData["y"] = coordMatch[2];
                             } else {
+                                console.warn(`[Scraper] Fila ${j}: sin coordenadas. Texto: "${textContent.trim().substring(0, 80)}"`);
                                 villageData["x"] = "0";
                                 villageData["y"] = "0";
                             }
@@ -302,13 +319,18 @@ export class Scraper {
 
                             if (passedFilter) {
                                 const playerName = players[currentPlayer.playerId] || 'Unknown';
-                                csvData += `${villageData["x"]}|${villageData["y"]},${playerName},${villageData["points"]},`;
-                                csvData += headersList.map(item => item ? (villageData[item] || "0") : "0").join(",") + "\n";
+                                const row = `${villageData["x"]}|${villageData["y"]},${playerName},${villageData["points"]},` +
+                                    headersList.map(item => item ? (villageData[item] || "0") : "0").join(",") + "\n";
+                                console.log(`[Scraper] Fila añadida al CSV:`, row.trim());
+                                csvData += row;
+                            } else {
+                                console.log(`[Scraper] Fila ${j} descartada por filtros. villageData:`, villageData);
                             }
                         }
                     }
 
                     if ((currentPlayer.villageAmount / 1000) > pageNumber) {
+                        console.log(`[Scraper] playerId=${currentPlayer.playerId}: hay más páginas (villageAmount=${currentPlayer.villageAmount}), cargando página ${pageNumber + 1}`);
                         pageNumber++;
                     } else {
                         currentIndex++;
@@ -317,7 +339,8 @@ export class Scraper {
 
                     setTimeout(loop, 200);
                 },
-                error: () => {
+                error: (_jqXHR: any, textStatus: string, errorThrown: string) => {
+                    console.error(`[Scraper] Error AJAX para playerId=${currentPlayer.playerId}, página=${pageNumber}: ${textStatus} - ${errorThrown}`);
                     currentIndex++;
                     pageNumber = 1;
                     setTimeout(loop, 200);
