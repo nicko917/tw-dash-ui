@@ -148,7 +148,10 @@ export class Scraper {
 
             // La columna "Pueblos" es el 5º td.lit-item (split produce array, índice 4 es el 5º fragmento)
             const litItemSplit = rowHtml.split('<td class="lit-item">');
-            const villageAmountRaw = litItemSplit[4] ? litItemSplit[4].split("</td>")[0].trim() : "1";
+            const villageAmountCell = litItemSplit[4];
+            const villageAmountRaw = villageAmountCell
+                ? (villageAmountCell.split("</td>")[0] ?? "").trim()
+                : "1";
             const villageAmount = parseInt(villageAmountRaw, 10) || 1;
 
             if (!playerId || isNaN(parseInt(playerId, 10))) {
@@ -265,8 +268,8 @@ export class Scraper {
                             const textContent = row.textContent || "";
                             const coordMatch = textContent.match(/\((\d{1,3})\|(\d{1,3})\)/);
                             if (coordMatch) {
-                                villageData["x"] = coordMatch[1];
-                                villageData["y"] = coordMatch[2];
+                                villageData["x"] = coordMatch[1] ?? "0";
+                                villageData["y"] = coordMatch[2] ?? "0";
                             } else {
                                 console.warn(`[Scraper] Fila ${j}: sin coordenadas. Texto: "${textContent.trim().substring(0, 80)}"`);
                                 villageData["x"] = "0";
@@ -326,8 +329,10 @@ export class Scraper {
 
                             let passedFilter = true;
                             for (const key in this.filters) {
-                                for (let k = 0; k < this.filters[key].length; k++) {
-                                    const filterItem = this.filters[key][k];
+                                const filterList = this.filters[key];
+                                if (!filterList) continue;
+                                for (let k = 0; k < filterList.length; k++) {
+                                    const filterItem = filterList[k];
                                     if (!filterItem) continue;
 
                                     const operator = filterItem[0];
@@ -354,9 +359,9 @@ export class Scraper {
 
                                 if (currentPlayerData) {
                                     currentPlayerData.villages.push({
-                                        x: villageData["x"],
-                                        y: villageData["y"],
-                                        points: villageData["points"],
+                                        x: villageData["x"] ?? "0",
+                                        y: villageData["y"] ?? "0",
+                                        points: villageData["points"] || "0",
                                         values: headersList.reduce((acc: Record<string, string>, key) => {
                                             acc[key] = villageData[key] || "0";
                                             return acc;

@@ -1,4 +1,5 @@
-import { Scraper, ReadResult } from './Scraper';
+import { Scraper } from './Scraper';
+import type { ReadResult } from './Scraper';
 
 declare const game_data: any;
 declare const Dialog: any;
@@ -204,7 +205,7 @@ export class Dashboard {
         ).join('');
 
         const html = `
-            <div>
+            <div style="max-width: 1340px; width: 100%;">
                 <p><h2>Datos de todos los jugadores</h2></p>
                 <p>Modo seleccionado: ${result.mode}</p>
                 <p>Jugadores encontrados: ${result.players.length}</p>
@@ -251,8 +252,11 @@ export class Dashboard {
                     this.renderPlayerDetails(playerSelect.value, result);
                 });
                 if (result.players.length > 0) {
-                    playerSelect.selectedIndex = 1;
-                    this.renderPlayerDetails(result.players[0].playerId, result);
+                    const firstPlayer = result.players[0];
+                    if (firstPlayer) {
+                        playerSelect.selectedIndex = 1;
+                        this.renderPlayerDetails(firstPlayer.playerId, result);
+                    }
                 }
             }
         }, 100);
