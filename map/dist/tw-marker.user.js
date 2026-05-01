@@ -1181,11 +1181,35 @@
             </div>
         `;
           Dialog.show("Datos de jugadores", html);
-          const popup = document.getElementById("popup_box_Datos de jugadores");
-          if (popup) {
-            popup.style.width = "1340px !important";
-            popup.style.maxWidth = "1340px !important";
-          }
+          const applyPopupWidth = (popup) => {
+            popup.style.setProperty("width", "1340px", "important");
+            popup.style.setProperty("max-width", "1340px", "important");
+          };
+          const setupPopupWidthWatcher = (popup) => {
+            applyPopupWidth(popup);
+            const observer = new MutationObserver((mutations) => {
+              for (const mutation of mutations) {
+                if (mutation.type === "attributes" && mutation.attributeName === "style") {
+                  applyPopupWidth(popup);
+                }
+              }
+            });
+            observer.observe(popup, { attributes: true, attributeFilter: ["style"] });
+            const disconnectWatcher = () => {
+              if (!document.body.contains(popup)) {
+                observer.disconnect();
+                window.removeEventListener("scroll", disconnectWatcher);
+              }
+            };
+            window.addEventListener("scroll", disconnectWatcher);
+          };
+          const popupWaitInterval = window.setInterval(() => {
+            const popup = document.getElementById("popup_box_Datos de jugadores");
+            if (popup) {
+              setupPopupWidthWatcher(popup);
+              window.clearInterval(popupWaitInterval);
+            }
+          }, 50);
           setTimeout(() => {
             const downloadBtn = document.getElementById("tw-dash-download");
             if (downloadBtn) {
