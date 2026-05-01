@@ -165,44 +165,39 @@ function readData() {
             });
             document.getElementById("bar").value = (i / playerInfoList.length);
 
-            let temp = page.responseText.split("vis w100");
-            if (temp.length === 2 || temp.length === 4) {
-                rows = page.responseText.split("vis w100")[temp.length - 1].split("<tr>");
-                step = mode == "members_defense" ? 2 : 1;
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(page.responseText, 'text/html');
+            const tables = doc.querySelectorAll('table.vis.w100');
+            const troopTable = tables.length > 0 ? tables[tables.length - 1] : null;
 
-                for (j = 2; j + step < rows.length; j = j + step) {
+            if (troopTable) {
+                const allRows = Array.from(troopTable.querySelectorAll('tbody > tr, tr'));
+                const step = mode === 'members_defense' ? 2 : 1;
+
+                // El primer tr (índice 0) es la cabecera, los siguientes son jugadores/aldeas
+                for (let j = 1; j < allRows.length; j += step) {
+                    const tds = Array.from(allRows[j].querySelectorAll('td'));
+                    if (tds.length < 2) continue;
+
                     villageData = {};
 
-                    // Extraer coordenadas
-                    let coordMatch = rows[j].match(/\((\d{1,3}\|\d{1,3})\)/);
-                    if (coordMatch && coordMatch[1]) {
-                        let [x, y] = coordMatch[1].split("|");
-                        villageData["x"] = x;
-                        villageData["y"] = y;
+                    // Extraer coordenadas del texto de la primera celda
+                    const coordMatch = tds[0].textContent.match(/\((\d{1,3})\|(\d{1,3})\)/);
+                    if (coordMatch) {
+                        villageData["x"] = coordMatch[1];
+                        villageData["y"] = coordMatch[2];
                     } else {
                         villageData["x"] = "0";
                         villageData["y"] = "0";
                     }
 
-                    // Extraer puntos
-                    let pointsMatch = rows[j].match(/td>(\d+)<span[^>]*>\.?<\/span>(\d+)</);
-                    villageData["points"] = pointsMatch ?
-                        pointsMatch[1] + pointsMatch[2] :
-                        (rows[j].match(/td>(\d+(?:\.\d+)?)</) || [, "0"])[1].replace(/\./g, '');
+                    // Extraer puntos de la segunda celda
+                    villageData["points"] = tds[1].textContent.trim().replace(/\./g, '');
 
-                    // Extraer tropas
-                    let tdMatches = rows[j].split('</td>');
+                    // Extraer tropas: cada celda a partir de la índice 2
                     for (k = 0; k < unitsList.length; k++) {
-                        let cellIndex = k + 2;
-                        let unitData = "0";
-
-                        if (tdMatches[cellIndex]) {
-                            let troopMatch = tdMatches[cellIndex].match(/class="[^"]*">\s*(\d+)\s*$/);
-                            if (troopMatch && !tdMatches[cellIndex].includes('class="hidden"')) {
-                                unitData = troopMatch[1];
-                            }
-                        }
-                        villageData[unitsList[k]] = unitData;
+                        const td = tds[k + 2];
+                        villageData[unitsList[k]] = td ? td.textContent.trim() : "0";
                     }
 
                     // Aplicar filtros
@@ -227,7 +222,7 @@ function readData() {
             }
             i++;
 
-            if (temp.length === 4 && playerInfoList[i].villageAmount / 1000 > pageNumber) {
+            if (troopTable !== null && playerInfoList[i].villageAmount / 1000 > pageNumber) {
                 i--;
                 pageNumber++;
             } else {
