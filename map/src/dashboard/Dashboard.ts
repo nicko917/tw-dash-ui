@@ -231,13 +231,22 @@ export class Dashboard {
 
         Dialog.show("Datos de jugadores", html);
 
-        setTimeout(() => {
+        const enforcePopupWidth = () => {
             const popup = document.getElementById('popup_box_Datos de jugadores');
-            if (popup) {
-                popup.style.setProperty('width', '1340px', 'important');
-                popup.style.setProperty('max-width', '1340px', 'important');
-            }
+            if (!popup) return false;
+            popup.style.setProperty('width', '1340px', 'important');
+            popup.style.setProperty('max-width', '1340px', 'important');
+            return true;
+        };
 
+        enforcePopupWidth();
+        const popupWidthInterval = window.setInterval(() => {
+            if (!enforcePopupWidth()) {
+                window.clearInterval(popupWidthInterval);
+            }
+        }, 100);
+
+        setTimeout(() => {
             const downloadBtn = document.getElementById('tw-dash-download');
             const downloadBtn = document.getElementById('tw-dash-download');
             if (downloadBtn) {
