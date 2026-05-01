@@ -99,56 +99,44 @@ export class Scraper {
             return;
         }
 
+        // El juego siempre tiene la tabla de miembros en el índice 2 de los elementos con clase "vis"
         const tables = document.getElementsByClassName("vis");
-        console.log(`[Scraper] Tablas con clase 'vis' en el DOM: ${tables.length}`);
-        let membersTable: HTMLTableElement | null = null;
-        
-        for (let i = 0; i < tables.length; i++) {
-            const table = tables[i];
-            if (table && table.innerHTML && table.innerHTML.includes('player_id=')) {
-                membersTable = table as HTMLTableElement;
-                console.log(`[Scraper] Tabla de miembros encontrada en índice ${i}`);
-                break;
-            }
-        }
+        console.log(`[Scraper] Tablas con clase 'vis' en el DOM: ${tables.length}`, Array.from(tables).map((t, i) => `[${i}] ${t.className}`));
+        const membersTable = tables[2] as HTMLTableElement | undefined;
 
         if (!membersTable) {
-            console.error('[Scraper] No se encontró ninguna tabla con player_id=. Tablas disponibles:', Array.from(tables).map((t, i) => `[${i}] ${t.className}`));
+            console.error('[Scraper] No se encontró tables[2]. Tablas disponibles:', Array.from(tables).map((t, i) => `[${i}] ${t.className}`));
             UI.ErrorMessage("Could not find members table.", 3000);
             return;
         }
 
         const playerInfoList: { playerId: string, villageAmount: number }[] = [];
         const rows = membersTable.rows;
-        console.log(`[Scraper] Filas en la tabla de miembros: ${rows.length}`);
+        console.log(`[Scraper] Filas en tables[2] (${membersTable.className}): ${rows.length}`);
 
+        // Fila 0 = cabecera; última fila = totales → iterar de 1 a length-2
         for (let i = 1; i < rows.length - 1; i++) {
             const rowEl = rows[i];
             if (!rowEl) continue;
 
             const rowHtml = rowEl.innerHTML;
-            const playerIdMatch = rowHtml.match(/player_id=(\d+)/);
-            
-            if (playerIdMatch && playerIdMatch[1]) {
-                const playerId = playerIdMatch[1];
-                let villageAmount = 1;
-                
-                if (rowEl.cells && rowEl.cells.length >= 5) {
-                    const cell = rowEl.cells[4];
-                    if (cell) {
-                        const cellContent = cell.textContent || "";
-                        const parsed = parseInt(cellContent.trim(), 10);
-                        if (!isNaN(parsed)) {
-                            villageAmount = parsed;
-                        }
-                    }
-                }
+            // El patrón en el HTML es: name="player_id[2129190][id]"
+            // split("[")[1] => "2129190][id]..." → split("]")[0] => "2129190"
+            const bracketSplit = rowHtml.split("[");
+            const playerId = bracketSplit[1] ? bracketSplit[1].split("]")[0] : null;
 
-                console.log(`[Scraper] Fila ${i} -> playerId: ${playerId}, villageAmount: ${villageAmount}`);
-                playerInfoList.push({ playerId, villageAmount });
-            } else {
-                console.warn(`[Scraper] Fila ${i}: no se encontró player_id. HTML:`, rowHtml.substring(0, 200));
+            // La columna "Pueblos" es el 5º td.lit-item (split produce array, índice 4 es el 5º fragmento)
+            const litItemSplit = rowHtml.split('<td class="lit-item">');
+            const villageAmountRaw = litItemSplit[4] ? litItemSplit[4].split("</td>")[0].trim() : "1";
+            const villageAmount = parseInt(villageAmountRaw, 10) || 1;
+
+            if (!playerId || isNaN(parseInt(playerId, 10))) {
+                console.warn(`[Scraper] Fila ${i}: no se pudo extraer playerId. HTML:`, rowHtml.substring(0, 200));
+                continue;
             }
+
+            console.log(`[Scraper] Fila ${i} -> playerId: ${playerId}, villageAmount: ${villageAmount}`);
+            playerInfoList.push({ playerId, villageAmount });
         }
 
         if (playerInfoList.length === 0) {

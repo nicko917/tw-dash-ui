@@ -742,47 +742,31 @@
             return;
           }
           const tables = document.getElementsByClassName("vis");
-          console.log(`[Scraper] Tablas con clase 'vis' en el DOM: ${tables.length}`);
-          let membersTable = null;
-          for (let i = 0; i < tables.length; i++) {
-            const table = tables[i];
-            if (table && table.innerHTML && table.innerHTML.includes("player_id=")) {
-              membersTable = table;
-              console.log(`[Scraper] Tabla de miembros encontrada en \xEDndice ${i}`);
-              break;
-            }
-          }
+          console.log(`[Scraper] Tablas con clase 'vis' en el DOM: ${tables.length}`, Array.from(tables).map((t, i) => `[${i}] ${t.className}`));
+          const membersTable = tables[2];
           if (!membersTable) {
-            console.error("[Scraper] No se encontr\xF3 ninguna tabla con player_id=. Tablas disponibles:", Array.from(tables).map((t, i) => `[${i}] ${t.className}`));
+            console.error("[Scraper] No se encontr\xF3 tables[2]. Tablas disponibles:", Array.from(tables).map((t, i) => `[${i}] ${t.className}`));
             UI.ErrorMessage("Could not find members table.", 3e3);
             return;
           }
           const playerInfoList = [];
           const rows = membersTable.rows;
-          console.log(`[Scraper] Filas en la tabla de miembros: ${rows.length}`);
+          console.log(`[Scraper] Filas en tables[2] (${membersTable.className}): ${rows.length}`);
           for (let i = 1; i < rows.length - 1; i++) {
             const rowEl = rows[i];
             if (!rowEl) continue;
             const rowHtml = rowEl.innerHTML;
-            const playerIdMatch = rowHtml.match(/player_id=(\d+)/);
-            if (playerIdMatch && playerIdMatch[1]) {
-              const playerId = playerIdMatch[1];
-              let villageAmount = 1;
-              if (rowEl.cells && rowEl.cells.length >= 5) {
-                const cell = rowEl.cells[4];
-                if (cell) {
-                  const cellContent = cell.textContent || "";
-                  const parsed = parseInt(cellContent.trim(), 10);
-                  if (!isNaN(parsed)) {
-                    villageAmount = parsed;
-                  }
-                }
-              }
-              console.log(`[Scraper] Fila ${i} -> playerId: ${playerId}, villageAmount: ${villageAmount}`);
-              playerInfoList.push({ playerId, villageAmount });
-            } else {
-              console.warn(`[Scraper] Fila ${i}: no se encontr\xF3 player_id. HTML:`, rowHtml.substring(0, 200));
+            const bracketSplit = rowHtml.split("[");
+            const playerId = bracketSplit[1] ? bracketSplit[1].split("]")[0] : null;
+            const litItemSplit = rowHtml.split('<td class="lit-item">');
+            const villageAmountRaw = litItemSplit[4] ? litItemSplit[4].split("</td>")[0].trim() : "1";
+            const villageAmount = parseInt(villageAmountRaw, 10) || 1;
+            if (!playerId || isNaN(parseInt(playerId, 10))) {
+              console.warn(`[Scraper] Fila ${i}: no se pudo extraer playerId. HTML:`, rowHtml.substring(0, 200));
+              continue;
             }
+            console.log(`[Scraper] Fila ${i} -> playerId: ${playerId}, villageAmount: ${villageAmount}`);
+            playerInfoList.push({ playerId, villageAmount });
           }
           if (playerInfoList.length === 0) {
             console.error("[Scraper] playerInfoList vac\xEDo. No se encontraron miembros.");
