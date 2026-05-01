@@ -91,7 +91,7 @@
                 <input type="button" class="btn evt-confirm-btn btn-confirm-no" id="tw-dash-back" value="Volver al men\xFA principal">
             </p>
         `;Dialog.show("Datos de la tribu",t),setTimeout(()=>{let a=document.getElementById("tw-dash-download");a&&a.addEventListener("click",()=>{this.downloadCSV("tribe_info",e)});let s=document.getElementById("tw-dash-back");s&&s.addEventListener("click",()=>{this.render()})},100)}showPlayerDashboard(e){let t=e.players.map(n=>`<option value="${n.playerId}">${n.playerName} (${n.villages.length})</option>`).join(""),a=`
-            <div style="max-width: 1340px; width: 100%;">
+            <div style="max-width: 1340px !important; width: 1340px !important;">
                 <p><h2>Datos de todos los jugadores</h2></p>
                 <p>Modo seleccionado: ${e.mode}</p>
                 <p>Jugadores encontrados: ${e.players.length}</p>
@@ -113,7 +113,7 @@
                     </div>
                 </div>
             </div>
-        `;Dialog.show("Datos de jugadores",a);let s=document.getElementById("popup_box_Datos de jugadores");s&&(s.style.width="1340px",s.style.maxWidth="1340px"),setTimeout(()=>{let n=document.getElementById("tw-dash-download");n&&n.addEventListener("click",()=>{this.downloadCSV("tribe_info",e.csvData)});let l=document.getElementById("tw-dash-back");l&&l.addEventListener("click",()=>{this.render()});let o=document.getElementById("tw-dash-player-select");if(o&&(o.addEventListener("change",()=>{this.renderPlayerDetails(o.value,e)}),e.players.length>0)){let r=e.players[0];r&&(o.selectedIndex=1,this.renderPlayerDetails(r.playerId,e))}},100)}renderPlayerDetails(e,t){let a=document.getElementById("tw-dash-player-details"),s=document.getElementById("tw-dash-player-sidebar");if(!a||!s)return;let n=t.players.find(g=>g.playerId===e);if(!n){a.innerHTML="<p>Selecciona un jugador para ver sus datos.</p>",s.innerHTML="";return}let l=n.villages.length,o=`
+        `;Dialog.show("Datos de jugadores",a);let s=document.getElementById("popup_box_Datos de jugadores");s&&(s.style.width="1340px !important",s.style.maxWidth="1340px !important"),setTimeout(()=>{let n=document.getElementById("tw-dash-download");n&&n.addEventListener("click",()=>{this.downloadCSV("tribe_info",e.csvData)});let l=document.getElementById("tw-dash-back");l&&l.addEventListener("click",()=>{this.render()});let o=document.getElementById("tw-dash-player-select");if(o&&(o.addEventListener("change",()=>{this.renderPlayerDetails(o.value,e)}),e.players.length>0)){let r=e.players[0];r&&(o.selectedIndex=1,this.renderPlayerDetails(r.playerId,e))}},100)}renderPlayerDetails(e,t){let a=document.getElementById("tw-dash-player-details"),s=document.getElementById("tw-dash-player-sidebar");if(!a||!s)return;let n=t.players.find(g=>g.playerId===e);if(!n){a.innerHTML="<p>Selecciona un jugador para ver sus datos.</p>",s.innerHTML="";return}let l=n.villages.length,o=`
             <div style="font-weight: bold; margin-bottom: 8px;">${n.playerName}</div>
             <div>Player ID: ${n.playerId}</div>
             <div>Aldeas encontradas: ${l}</div>

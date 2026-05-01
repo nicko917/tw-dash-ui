@@ -1157,7 +1157,7 @@
             (player) => `<option value="${player.playerId}">${player.playerName} (${player.villages.length})</option>`
           ).join("");
           const html = `
-            <div style="max-width: 1340px; width: 100%;">
+            <div style="max-width: 1340px !important; width: 1340px !important;">
                 <p><h2>Datos de todos los jugadores</h2></p>
                 <p>Modo seleccionado: ${result.mode}</p>
                 <p>Jugadores encontrados: ${result.players.length}</p>
@@ -1183,8 +1183,8 @@
           Dialog.show("Datos de jugadores", html);
           const popup = document.getElementById("popup_box_Datos de jugadores");
           if (popup) {
-            popup.style.width = "1340px";
-            popup.style.maxWidth = "1340px";
+            popup.style.width = "1340px !important";
+            popup.style.maxWidth = "1340px !important";
           }
           setTimeout(() => {
             const downloadBtn = document.getElementById("tw-dash-download");
