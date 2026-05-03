@@ -379,30 +379,77 @@ export class Dashboard {
         return aliases[unitKey] || unitKey;
     }
 
-    private isUnitKey(key: string): boolean {
-        const unitKeys = game_data.units || ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
-        return unitKeys.includes(key);
+    private getBuildingKeys(): string[] {
+        return ['main', 'barracks', 'stable', 'garage', 'snob', 'smith', 'place', 'statue', 'market', 'wood', 'stone', 'iron', 'farm', 'storage', 'hide', 'wall'];
     }
 
-    private getUnitIconSrc(unitKey: string): string | null {
-        const resolvedKey = this.getUnitIconKey(unitKey);
-        if (!this.isUnitKey(resolvedKey)) {
+    private getUnitKeys(): string[] {
+        return game_data.units || ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
+    }
+
+    private isUnitKey(key: string): boolean {
+        return this.getUnitKeys().includes(key);
+    }
+
+    private isBuildingKey(key: string): boolean {
+        return this.getBuildingKeys().includes(key);
+    }
+
+    private getBuildingIconTemplate(): { prefix: string; suffix: string } | null {
+        if (this.unitIconTemplateResolved && this.unitIconTemplate) {
+            // Reuse template resolution state if already initialized, but building icon template is separate.
+        }
+
+        let template: { prefix: string; suffix: string } | null = null;
+        const anyBuildingIcon = document.querySelector<HTMLImageElement>('img[src*="/graphic/buildings/"]');
+        if (anyBuildingIcon && anyBuildingIcon.src) {
+            const match = anyBuildingIcon.src.match(/^(.*\/buildings\/)\w+(\.(?:webp|png|gif))(?:\?.*)?$/i);
+            if (match) {
+                const prefix = match[1];
+                const suffix = match[2];
+                if (prefix && suffix) {
+                    template = { prefix, suffix };
+                }
+            }
+        }
+
+        if (!template) {
+            template = { prefix: '/graphic/buildings/', suffix: '.webp' };
+        }
+
+        return template;
+    }
+
+    private getBuildingIconSrc(buildingKey: string): string | null {
+        const resolvedKey = buildingKey;
+        if (!this.isBuildingKey(resolvedKey)) {
             return null;
         }
 
-        const existingIcon = document.querySelector<HTMLImageElement>(`img[src*="unit_${resolvedKey}."]`);
+        const existingIcon = document.querySelector<HTMLImageElement>(`img[src*="/graphic/buildings/${resolvedKey}."]`);
         if (existingIcon && existingIcon.src) {
             return existingIcon.src;
         }
 
-        const template = this.getUnitIconTemplate();
+        const template = this.getBuildingIconTemplate();
         if (!template) return null;
 
         return `${template.prefix}${resolvedKey}${template.suffix}`;
     }
 
+    private getIconSrc(key: string): string | null {
+        if (this.isBuildingKey(key)) {
+            const buildingIcon = this.getBuildingIconSrc(key);
+            if (buildingIcon) {
+                return buildingIcon;
+            }
+        }
+
+        return this.getUnitIconSrc(key);
+    }
+
     private renderMetricHeaderCell(key: string, label: string): string {
-        const iconSrc = this.getUnitIconSrc(key);
+        const iconSrc = this.getIconSrc(key);
         if (iconSrc) {
             return `<th style="padding: 4px; border: 1px solid #ccc; text-align: center;"><img src="${iconSrc}" alt="${label}" data-title="${label}" style="vertical-align: middle;"></th>`;
         }

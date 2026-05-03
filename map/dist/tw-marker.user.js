@@ -1386,25 +1386,62 @@
           };
           return aliases[unitKey] || unitKey;
         }
-        isUnitKey(key) {
-          const unitKeys = game_data.units || ["spear", "sword", "axe", "archer", "spy", "light", "marcher", "heavy", "ram", "catapult", "knight", "snob"];
-          return unitKeys.includes(key);
+        getBuildingKeys() {
+          return ["main", "barracks", "stable", "garage", "snob", "smith", "place", "statue", "market", "wood", "stone", "iron", "farm", "storage", "hide", "wall"];
         }
-        getUnitIconSrc(unitKey) {
-          const resolvedKey = this.getUnitIconKey(unitKey);
-          if (!this.isUnitKey(resolvedKey)) {
+        getUnitKeys() {
+          return game_data.units || ["spear", "sword", "axe", "archer", "spy", "light", "marcher", "heavy", "ram", "catapult", "knight", "snob"];
+        }
+        isUnitKey(key) {
+          return this.getUnitKeys().includes(key);
+        }
+        isBuildingKey(key) {
+          return this.getBuildingKeys().includes(key);
+        }
+        getBuildingIconTemplate() {
+          if (this.unitIconTemplateResolved && this.unitIconTemplate) {
+          }
+          let template = null;
+          const anyBuildingIcon = document.querySelector('img[src*="/graphic/buildings/"]');
+          if (anyBuildingIcon && anyBuildingIcon.src) {
+            const match = anyBuildingIcon.src.match(/^(.*\/buildings\/)\w+(\.(?:webp|png|gif))(?:\?.*)?$/i);
+            if (match) {
+              const prefix = match[1];
+              const suffix = match[2];
+              if (prefix && suffix) {
+                template = { prefix, suffix };
+              }
+            }
+          }
+          if (!template) {
+            template = { prefix: "/graphic/buildings/", suffix: ".webp" };
+          }
+          return template;
+        }
+        getBuildingIconSrc(buildingKey) {
+          const resolvedKey = buildingKey;
+          if (!this.isBuildingKey(resolvedKey)) {
             return null;
           }
-          const existingIcon = document.querySelector(`img[src*="unit_${resolvedKey}."]`);
+          const existingIcon = document.querySelector(`img[src*="/graphic/buildings/${resolvedKey}."]`);
           if (existingIcon && existingIcon.src) {
             return existingIcon.src;
           }
-          const template = this.getUnitIconTemplate();
+          const template = this.getBuildingIconTemplate();
           if (!template) return null;
           return `${template.prefix}${resolvedKey}${template.suffix}`;
         }
+        getIconSrc(key) {
+          if (this.isBuildingKey(key)) {
+            const buildingIcon = this.getBuildingIconSrc(key);
+            if (buildingIcon) {
+              return buildingIcon;
+            }
+          }
+          return this.getUnitIconSrc(key);
+        }
         renderMetricHeaderCell(key, label) {
-          const iconSrc = this.getUnitIconSrc(key);
+          const iconSrc = this.getIconSrc(key);
           if (iconSrc) {
             return `<th style="padding: 4px; border: 1px solid #ccc; text-align: center;"><img src="${iconSrc}" alt="${label}" data-title="${label}" style="vertical-align: middle;"></th>`;
           }
