@@ -164,6 +164,61 @@ export class Scraper {
         return { indexToKey, startRow };
     }
 
+    private fetchPageHtml(url: string): Promise<string> {
+        return new Promise((resolve, reject) => {
+            $.ajax({
+                url,
+                success: (result: string) => resolve(result),
+                error: (_jqXHR: any, textStatus: string, errorThrown: string) => reject(new Error(`${textStatus} - ${errorThrown}`))
+            });
+        });
+    }
+
+    private parsePlayerTable(html: string, mode: string, headersList: string[], displayHeadersList: string[]): VillageData[] {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const visTables = doc.querySelectorAll('table.vis.w100');
+        if (visTables.length === 0) {
+            return [];
+        }
+
+        const dataTable = visTables[visTables.length - 1] as HTMLTableElement;
+        const { indexToKey, startRow } = this.buildHeaderIndexMap(dataTable, mode, headersList, displayHeadersList);
+        const trs = dataTable.querySelectorAll('tr');
+        const villages: VillageData[] = [];
+
+        for (let j = startRow; j < trs.length; j++) {
+            const row = trs[j];
+            if (!row || row.querySelector('th')) continue;
+
+            const tds = row.querySelectorAll('td');
+            const textContent = row.textContent || '';
+            const coordMatch = textContent.match(/\((\d{1,3})\|(\d{1,3})\)/);
+            const x = coordMatch ? coordMatch[1] : '0';
+            const y = coordMatch ? coordMatch[2] : '0';
+            let points = '0';
+            if (tds.length >= 2 && tds[1]) {
+                points = (tds[1].textContent || '0').replace(/\./g, '').trim();
+            }
+
+            const values: Record<string, string> = {};
+            tds.forEach((cell, idx) => {
+                const headerKey = indexToKey[idx];
+                if (!headerKey) return;
+
+                let val = cell.textContent?.trim() || '0';
+                if (cell.classList.contains('hidden')) {
+                    val = '0';
+                }
+                values[headerKey] = val;
+            });
+
+            villages.push({ x, y, points, values });
+        }
+
+        return villages;
+    }
+
     public readData(mode: string, onProgress: (progress: number) => void, onComplete: (result: ReadResult) => void) {
         if (game_data.mode !== "members" && game_data.mode !== "members_troops" && game_data.mode !== "members_defense" && game_data.mode !== "members_buildings") {
             UI.ErrorMessage("You must be on the Ally Members page to run this.", 3000);
@@ -222,14 +277,32 @@ export class Scraper {
 
         let csvData = "Coords,Player,Points,";
         
+        const unitHeaders = game_data.units || ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
+        const buildingHeaders = ['main', 'barracks', 'stable', 'garage', 'snob', 'smith', 'place', 'statue', 'market', 'wood', 'stone', 'iron', 'farm', 'storage', 'hide', 'wall'];
+        const buildingDisplayHeaders = ['Edificio Principal', 'Cuartel', 'Cuadra', 'Taller', 'Corte', 'Herrería', 'Plaza de reuniones', 'Estatua', 'Mercado', 'Leñador', 'Barrera', 'Mina de hierro', 'Granja', 'Almacén', 'Escondrijo', 'Muralla'];
+
         let headersList: string[] = [];
         let displayHeadersList: string[] = [];
+        let parsePrimaryHeaders: string[] = [];
+        let parseBuildingHeaders: string[] = [];
+        let parseBuildingDisplayHeaders: string[] = [];
+
         if (mode === "members_buildings") {
-            headersList = ['main', 'barracks', 'stable', 'garage', 'snob', 'smith', 'place', 'statue', 'market', 'wood', 'stone', 'iron', 'farm', 'storage', 'hide', 'wall'];
-            displayHeadersList = ['Edificio Principal', 'Cuartel', 'Cuadra', 'Taller', 'Corte', 'Herrería', 'Plaza de reuniones', 'Estatua', 'Mercado', 'Leñador', 'Barrera', 'Mina de hierro', 'Granja', 'Almacén', 'Escondrijo', 'Muralla'];
+            headersList = buildingHeaders;
+            displayHeadersList = buildingDisplayHeaders;
+            parsePrimaryHeaders = buildingHeaders;
+            parseBuildingHeaders = [];
+        } else if (mode === "members_troops") {
+            headersList = [...unitHeaders, ...buildingHeaders];
+            displayHeadersList = [...unitHeaders, ...buildingDisplayHeaders];
+            parsePrimaryHeaders = unitHeaders;
+            parseBuildingHeaders = buildingHeaders;
+            parseBuildingDisplayHeaders = buildingDisplayHeaders;
         } else {
-            headersList = game_data.units || ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
-            displayHeadersList = headersList;
+            headersList = unitHeaders;
+            displayHeadersList = unitHeaders;
+            parsePrimaryHeaders = unitHeaders;
+            parseBuildingHeaders = [];
         }
 
         for (let k = 0; k < displayHeadersList.length; k++) {
@@ -299,117 +372,74 @@ export class Scraper {
                     }
 
                     if (dataTable) {
-                        const trs = dataTable.querySelectorAll('tr');
-                        let step = mode === "members_defense" ? 2 : 1;
-                        const { indexToKey, startRow } = this.buildHeaderIndexMap(dataTable, mode, headersList, displayHeadersList);
-                        console.log(`[Scraper] playerId=${currentPlayer.playerId}: filas en tabla=${trs.length}, startRow=${startRow}, step=${step}`, indexToKey);
+                        const primaryHtml = result;
+                        const buildingHtmlPromise = mode === 'members_troops'
+                            ? this.fetchPageHtml(`https://${window.location.host}/game.php?screen=ally&mode=members_buildings&player_id=${currentPlayer.playerId}&page=${pageNumber}`)
+                            : Promise.resolve('');
 
-                        for (let j = startRow; j + step - 1 < trs.length; j += step) {
-                            const row = trs[j];
-                            if (!row || row.querySelector('th')) continue;
+                        buildingHtmlPromise.then(buildingHtml => {
+                            const primaryVillages = this.parsePlayerTable(primaryHtml, mode, parsePrimaryHeaders, displayHeadersList);
+                            const buildingVillages = mode === 'members_troops'
+                                ? this.parsePlayerTable(buildingHtml, 'members_buildings', parseBuildingHeaders, parseBuildingDisplayHeaders)
+                                : [];
 
-                            let villageData: Record<string, string> = {};
+                            const villageMap: Record<string, VillageData> = {};
 
-                            const textContent = row.textContent || "";
-                            const coordMatch = textContent.match(/\((\d{1,3})\|(\d{1,3})\)/);
-                            if (coordMatch) {
-                                villageData["x"] = coordMatch[1] ?? "0";
-                                villageData["y"] = coordMatch[2] ?? "0";
-                            } else {
-                                console.warn(`[Scraper] Fila ${j}: sin coordenadas. Texto: "${textContent.trim().substring(0, 80)}"`);
-                                villageData["x"] = "0";
-                                villageData["y"] = "0";
-                            }
+                            primaryVillages.forEach(village => {
+                                const key = `${village.x}|${village.y}`;
+                                villageMap[key] = { ...village, values: { ...village.values } };
+                            });
 
-                            const tds = row.querySelectorAll('td');
-                            if (tds && tds.length >= 2) {
-                                const cell1 = tds[1];
-                                if (cell1) {
-                                    const pointsText = cell1.textContent || "0";
-                                    villageData["points"] = pointsText.replace(/\./g, '').trim();
-                                } else {
-                                    villageData["points"] = "0";
+                            buildingVillages.forEach(village => {
+                                const key = `${village.x}|${village.y}`;
+                                if (!villageMap[key]) {
+                                    villageMap[key] = { x: village.x, y: village.y, points: village.points || '0', values: {} };
                                 }
-                            } else {
-                                villageData["points"] = "0";
-                            }
+                                villageMap[key].values = {
+                                    ...villageMap[key].values,
+                                    ...village.values,
+                                };
+                            });
 
-                            if (tds) {
-                                for (let idx = 0; idx < tds.length; idx++) {
-                                    const headerKey = indexToKey[idx];
-                                    if (!headerKey) continue;
-
-                                    const cell = tds[idx];
-                                    if (!cell) continue;
-
-                                    let val = cell.textContent?.trim() || "0";
-                                    if (cell.classList.contains('hidden')) {
-                                        val = "0";
-                                    }
-                                    villageData[headerKey] = val;
-                                }
-                            }
-
-                            for (let k = 0; k < headersList.length; k++) {
-                                const headerKey = headersList[k];
-                                if (!headerKey || villageData[headerKey] !== undefined) continue;
-
-                                const cellIndex = k + 2;
-                                let value = "0";
-                                if (tds && tds.length > cellIndex) {
-                                    const cell = tds[cellIndex];
-                                    if (cell && !cell.classList.contains('hidden')) {
-                                        value = cell.textContent?.trim() || "0";
-                                    }
-                                }
-                                villageData[headerKey] = value;
-                            }
-
-                            let passedFilter = true;
-                            for (const key in this.filters) {
-                                const filterList = this.filters[key];
-                                if (!filterList) continue;
-                                for (let k = 0; k < filterList.length; k++) {
-                                    const filterItem = filterList[k];
-                                    if (!filterItem) continue;
-
-                                    const operator = filterItem[0];
-                                    const filterVal = parseInt(filterItem[1], 10);
-                                    const actualVal = parseInt(villageData[key] || "0", 10);
-
-                                    if (operator === ">" && actualVal <= filterVal) {
-                                        passedFilter = false;
-                                        break;
-                                    } else if (operator === "<" && actualVal >= filterVal) {
-                                        passedFilter = false;
-                                        break;
-                                    }
-                                }
-                                if (!passedFilter) break;
-                            }
-
-                            if (passedFilter) {
+                            Object.values(villageMap).forEach(villageData => {
                                 const playerName = players[currentPlayer.playerId] || 'Unknown';
-                                const row = `${villageData["x"]}|${villageData["y"]},${playerName},${villageData["points"]},` +
-                                    headersList.map(item => item ? (villageData[item] || "0") : "0").join(",") + "\n";
+                                const row = `${villageData.x}|${villageData.y},${playerName},${villageData.points},` +
+                                    headersList.map(item => item ? (villageData.values[item] || '0') : '0').join(',') + '\n';
                                 console.log(`[Scraper] Fila añadida al CSV:`, row.trim());
                                 csvData += row;
 
                                 if (currentPlayerData) {
                                     currentPlayerData.villages.push({
-                                        x: villageData["x"] ?? "0",
-                                        y: villageData["y"] ?? "0",
-                                        points: villageData["points"] || "0",
+                                        x: villageData.x ?? '0',
+                                        y: villageData.y ?? '0',
+                                        points: villageData.points || '0',
                                         values: headersList.reduce((acc: Record<string, string>, key) => {
-                                            acc[key] = villageData[key] || "0";
+                                            acc[key] = villageData.values[key] || '0';
                                             return acc;
                                         }, {})
                                     });
                                 }
+                            });
+
+                            if ((currentPlayer.villageAmount / 1000) > pageNumber) {
+                                console.log(`[Scraper] playerId=${currentPlayer.playerId}: hay más páginas (villageAmount=${currentPlayer.villageAmount}), cargando página ${pageNumber + 1}`);
+                                pageNumber++;
                             } else {
-                                console.log(`[Scraper] Fila ${j} descartada por filtros. villageData:`, villageData);
+                                currentIndex++;
+                                pageNumber = 1;
                             }
-                        }
+
+                            setTimeout(loop, 200);
+                        }).catch(error => {
+                            console.error(`[Scraper] Error al cargar página adicional para playerId=${currentPlayer.playerId}, página=${pageNumber}:`, error);
+                            if ((currentPlayer.villageAmount / 1000) > pageNumber) {
+                                pageNumber++;
+                            } else {
+                                currentIndex++;
+                                pageNumber = 1;
+                            }
+                            setTimeout(loop, 200);
+                        });
                     }
 
                     if ((currentPlayer.villageAmount / 1000) > pageNumber) {
