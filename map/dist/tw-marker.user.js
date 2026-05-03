@@ -1431,6 +1431,19 @@
           if (!template) return null;
           return `${template.prefix}${resolvedKey}${template.suffix}`;
         }
+        getUnitIconSrc(unitKey) {
+          const resolvedKey = this.getUnitIconKey(unitKey);
+          if (!this.isUnitKey(resolvedKey)) {
+            return null;
+          }
+          const existingIcon = document.querySelector(`img[src*="unit_${resolvedKey}."]`);
+          if (existingIcon && existingIcon.src) {
+            return existingIcon.src;
+          }
+          const template = this.getUnitIconTemplate();
+          if (!template) return null;
+          return `${template.prefix}${resolvedKey}${template.suffix}`;
+        }
         getIconSrc(key) {
           if (this.isBuildingKey(key)) {
             const buildingIcon = this.getBuildingIconSrc(key);

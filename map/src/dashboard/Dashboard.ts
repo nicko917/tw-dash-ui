@@ -437,6 +437,23 @@ export class Dashboard {
         return `${template.prefix}${resolvedKey}${template.suffix}`;
     }
 
+    private getUnitIconSrc(unitKey: string): string | null {
+        const resolvedKey = this.getUnitIconKey(unitKey);
+        if (!this.isUnitKey(resolvedKey)) {
+            return null;
+        }
+
+        const existingIcon = document.querySelector<HTMLImageElement>(`img[src*="unit_${resolvedKey}."]`);
+        if (existingIcon && existingIcon.src) {
+            return existingIcon.src;
+        }
+
+        const template = this.getUnitIconTemplate();
+        if (!template) return null;
+
+        return `${template.prefix}${resolvedKey}${template.suffix}`;
+    }
+
     private getIconSrc(key: string): string | null {
         if (this.isBuildingKey(key)) {
             const buildingIcon = this.getBuildingIconSrc(key);
