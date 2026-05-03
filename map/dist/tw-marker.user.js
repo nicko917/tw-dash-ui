@@ -1039,7 +1039,7 @@
                     <input type="text" id="tw-dash-val">
                     <input type="button" class="btn evt-confirm-btn btn-confirm-yes" id="tw-dash-add-filter" value="Guardar filtro">
                     <p>
-                        <table class="vis" style="width: 100%;">
+                        <table class="vis" style="width: auto; table-layout: auto;">
                             <tr>
                                 <th>Variable</th>
                                 <th>Operador</th>
@@ -1274,7 +1274,7 @@
           }).join("");
           detailsContainer.innerHTML = `
             <div style="margin-bottom: 8px; font-weight: bold;">Datos de ${player.playerName}</div>
-            <table class="vis" style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            <table class="vis" style="width: auto; table-layout: auto; border-collapse: collapse; font-size: 12px; white-space: nowrap;">
                 <thead><tr>${headerCells}</tr></thead>
                 <tbody>${tableRows || '<tr><td colspan="' + headersCount + '" style="padding: 8px; border: 1px solid #ccc; text-align: center;">No hay datos visibles.</td></tr>'}</tbody>
             </table>
