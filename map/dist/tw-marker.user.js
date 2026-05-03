@@ -740,18 +740,25 @@
           const text = (cell.textContent || "").trim().toLowerCase();
           const img = cell.querySelector("img");
           if (img && img.src) {
-            const match = img.src.match(/unit_(\w+)\.(?:webp|png|gif)/i);
-            if (match) {
-              return match[1].toLowerCase();
+            const unitMatch = img.src.match(/unit_(\w+)\.(?:webp|png|gif)/i);
+            if (unitMatch) {
+              return unitMatch[1].toLowerCase();
+            }
+            const buildingMatch = img.src.match(/buildings\/(\w+)\.(?:webp|png|gif)/i);
+            if (buildingMatch) {
+              return buildingMatch[1].toLowerCase();
             }
           }
+          const imgTitle = img ? (img.getAttribute("data-title") || img.getAttribute("title") || "").trim().toLowerCase() : "";
+          const cellTitle = (cell.getAttribute("data-title") || "").trim().toLowerCase();
+          const headerText = [text, imgTitle, cellTitle].filter(Boolean).join(" ");
           for (let k = 0; k < headersList.length; k++) {
             const key = headersList[k];
             const display = displayHeadersList[k] ? displayHeadersList[k].toLowerCase() : "";
-            if (display && text.indexOf(display) !== -1) {
+            if (display && headerText.indexOf(display) !== -1) {
               return key;
             }
-            if (key && text === key.toLowerCase()) {
+            if (key && headerText === key.toLowerCase()) {
               return key;
             }
           }
@@ -792,12 +799,28 @@
         parsePlayerTable(html, mode, headersList, displayHeadersList) {
           const parser = new DOMParser();
           const doc = parser.parseFromString(html, "text/html");
-          const visTables = doc.querySelectorAll("table.vis.w100");
-          if (visTables.length === 0) {
+          const candidateTables = Array.from(doc.querySelectorAll("table.vis.w100, table.vis"));
+          if (candidateTables.length === 0) {
             return [];
           }
-          const dataTable = visTables[visTables.length - 1];
+          let dataTable = null;
+          let selectedIndex = -1;
+          for (let i = 0; i < candidateTables.length; i++) {
+            const table = candidateTables[i];
+            const { indexToKey: indexToKey2 } = this.buildHeaderIndexMap(table, mode, headersList, displayHeadersList);
+            const mappedColumns = Object.keys(indexToKey2).length;
+            if (mappedColumns >= 2) {
+              dataTable = table;
+              selectedIndex = i;
+              break;
+            }
+          }
+          if (!dataTable) {
+            dataTable = candidateTables[candidateTables.length - 1];
+            selectedIndex = candidateTables.length - 1;
+          }
           const { indexToKey, startRow } = this.buildHeaderIndexMap(dataTable, mode, headersList, displayHeadersList);
+          console.log(`[Scraper] parsePlayerTable mode=${mode} selectedTable=${selectedIndex} mappedHeaders=${Object.keys(indexToKey).length}`);
           const trs = dataTable.querySelectorAll("tr");
           const villages = [];
           for (let j = startRow; j < trs.length; j++) {
