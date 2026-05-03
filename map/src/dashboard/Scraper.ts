@@ -114,6 +114,56 @@ export class Scraper {
         return playerDict;
     }
 
+    private getHeaderKeyForCell(cell: HTMLTableCellElement, mode: string, headersList: string[], displayHeadersList: string[]): string | null {
+        const text = (cell.textContent || "").trim().toLowerCase();
+        const img = cell.querySelector('img');
+        if (img && img.src) {
+            const match = img.src.match(/unit_(\w+)\.(?:webp|png|gif)/i);
+            if (match) {
+                return match[1].toLowerCase();
+            }
+        }
+
+        for (let k = 0; k < headersList.length; k++) {
+            const key = headersList[k];
+            const display = displayHeadersList[k] ? displayHeadersList[k].toLowerCase() : "";
+            if (display && text.indexOf(display) !== -1) {
+                return key;
+            }
+            if (key && text === key.toLowerCase()) {
+                return key;
+            }
+        }
+
+        return null;
+    }
+
+    private buildHeaderIndexMap(dataTable: HTMLTableElement, mode: string, headersList: string[], displayHeadersList: string[]): { indexToKey: Record<number, string>, startRow: number } {
+        const trs = dataTable.querySelectorAll('tr');
+        let headerRowIndex = -1;
+        for (let i = 0; i < trs.length; i++) {
+            if (trs[i].querySelector('th')) {
+                headerRowIndex = i;
+                break;
+            }
+        }
+
+        const indexToKey: Record<number, string> = {};
+        let startRow = 1;
+        if (headerRowIndex >= 0) {
+            const headerCells = trs[headerRowIndex].querySelectorAll('th,td');
+            headerCells.forEach((cell, idx) => {
+                const headerKey = this.getHeaderKeyForCell(cell as HTMLTableCellElement, mode, headersList, displayHeadersList);
+                if (headerKey) {
+                    indexToKey[idx] = headerKey;
+                }
+            });
+            startRow = headerRowIndex + 1;
+        }
+
+        return { indexToKey, startRow };
+    }
+
     public readData(mode: string, onProgress: (progress: number) => void, onComplete: (result: ReadResult) => void) {
         if (game_data.mode !== "members" && game_data.mode !== "members_troops" && game_data.mode !== "members_defense" && game_data.mode !== "members_buildings") {
             UI.ErrorMessage("You must be on the Ally Members page to run this.", 3000);
@@ -250,14 +300,9 @@ export class Scraper {
 
                     if (dataTable) {
                         const trs = dataTable.querySelectorAll('tr');
-                        
                         let step = mode === "members_defense" ? 2 : 1;
-                        let startRow = 1; 
-                        
-                        if (trs.length > 1 && trs[1] && trs[1].querySelector('th')) {
-                            startRow = 2;
-                        }
-                        console.log(`[Scraper] playerId=${currentPlayer.playerId}: filas en tabla=${trs.length}, startRow=${startRow}, step=${step}`);
+                        const { indexToKey, startRow } = this.buildHeaderIndexMap(dataTable, mode, headersList, displayHeadersList);
+                        console.log(`[Scraper] playerId=${currentPlayer.playerId}: filas en tabla=${trs.length}, startRow=${startRow}, step=${step}`, indexToKey);
 
                         for (let j = startRow; j + step - 1 < trs.length; j += step) {
                             const row = trs[j];
@@ -289,42 +334,35 @@ export class Scraper {
                                 villageData["points"] = "0";
                             }
 
-                            if (mode === "members_buildings") {
-                                for (let k = 0; k < headersList.length; k++) {
-                                    const headerKey = headersList[k];
+                            if (tds) {
+                                for (let idx = 0; idx < tds.length; idx++) {
+                                    const headerKey = indexToKey[idx];
                                     if (!headerKey) continue;
 
-                                    const cellIndex = k + 2;
-                                    if (tds && tds.length > cellIndex) {
-                                        const cell = tds[cellIndex];
-                                        if (cell) {
-                                            let val = cell.textContent?.trim() || "0";
-                                            if (cell.classList.contains('hidden')) {
-                                                val = "0";
-                                            }
-                                            villageData[headerKey] = val;
-                                        } else {
-                                            villageData[headerKey] = "0";
-                                        }
-                                    } else {
-                                        villageData[headerKey] = "0";
-                                    }
-                                }
-                            } else {
-                                for (let k = 0; k < headersList.length; k++) {
-                                    const headerKey = headersList[k];
-                                    if (!headerKey) continue;
+                                    const cell = tds[idx];
+                                    if (!cell) continue;
 
-                                    const cellIndex = k + 2;
-                                    let unitData = "0";
-                                    if (tds && tds.length > cellIndex) {
-                                        const cell = tds[cellIndex];
-                                        if (cell && !cell.classList.contains('hidden')) {
-                                            unitData = cell.textContent?.trim() || "0";
-                                        }
+                                    let val = cell.textContent?.trim() || "0";
+                                    if (cell.classList.contains('hidden')) {
+                                        val = "0";
                                     }
-                                    villageData[headerKey] = unitData;
+                                    villageData[headerKey] = val;
                                 }
+                            }
+
+                            for (let k = 0; k < headersList.length; k++) {
+                                const headerKey = headersList[k];
+                                if (!headerKey || villageData[headerKey] !== undefined) continue;
+
+                                const cellIndex = k + 2;
+                                let value = "0";
+                                if (tds && tds.length > cellIndex) {
+                                    const cell = tds[cellIndex];
+                                    if (cell && !cell.classList.contains('hidden')) {
+                                        value = cell.textContent?.trim() || "0";
+                                    }
+                                }
+                                villageData[headerKey] = value;
                             }
 
                             let passedFilter = true;

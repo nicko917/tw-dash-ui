@@ -736,6 +736,50 @@
           this.players = playerDict;
           return playerDict;
         }
+        getHeaderKeyForCell(cell, mode, headersList, displayHeadersList) {
+          const text = (cell.textContent || "").trim().toLowerCase();
+          const img = cell.querySelector("img");
+          if (img && img.src) {
+            const match = img.src.match(/unit_(\w+)\.(?:webp|png|gif)/i);
+            if (match) {
+              return match[1].toLowerCase();
+            }
+          }
+          for (let k = 0; k < headersList.length; k++) {
+            const key = headersList[k];
+            const display = displayHeadersList[k] ? displayHeadersList[k].toLowerCase() : "";
+            if (display && text.indexOf(display) !== -1) {
+              return key;
+            }
+            if (key && text === key.toLowerCase()) {
+              return key;
+            }
+          }
+          return null;
+        }
+        buildHeaderIndexMap(dataTable, mode, headersList, displayHeadersList) {
+          const trs = dataTable.querySelectorAll("tr");
+          let headerRowIndex = -1;
+          for (let i = 0; i < trs.length; i++) {
+            if (trs[i].querySelector("th")) {
+              headerRowIndex = i;
+              break;
+            }
+          }
+          const indexToKey = {};
+          let startRow = 1;
+          if (headerRowIndex >= 0) {
+            const headerCells = trs[headerRowIndex].querySelectorAll("th,td");
+            headerCells.forEach((cell, idx) => {
+              const headerKey = this.getHeaderKeyForCell(cell, mode, headersList, displayHeadersList);
+              if (headerKey) {
+                indexToKey[idx] = headerKey;
+              }
+            });
+            startRow = headerRowIndex + 1;
+          }
+          return { indexToKey, startRow };
+        }
         readData(mode, onProgress, onComplete) {
           if (game_data.mode !== "members" && game_data.mode !== "members_troops" && game_data.mode !== "members_defense" && game_data.mode !== "members_buildings") {
             UI.ErrorMessage("You must be on the Ally Members page to run this.", 3e3);
@@ -842,11 +886,8 @@
                 if (dataTable) {
                   const trs = dataTable.querySelectorAll("tr");
                   let step = mode === "members_defense" ? 2 : 1;
-                  let startRow = 1;
-                  if (trs.length > 1 && trs[1] && trs[1].querySelector("th")) {
-                    startRow = 2;
-                  }
-                  console.log(`[Scraper] playerId=${currentPlayer.playerId}: filas en tabla=${trs.length}, startRow=${startRow}, step=${step}`);
+                  const { indexToKey, startRow } = this.buildHeaderIndexMap(dataTable, mode, headersList, displayHeadersList);
+                  console.log(`[Scraper] playerId=${currentPlayer.playerId}: filas en tabla=${trs.length}, startRow=${startRow}, step=${step}`, indexToKey);
                   for (let j = startRow; j + step - 1 < trs.length; j += step) {
                     const row = trs[j];
                     if (!row || row.querySelector("th")) continue;
@@ -873,40 +914,31 @@
                     } else {
                       villageData["points"] = "0";
                     }
-                    if (mode === "members_buildings") {
-                      for (let k = 0; k < headersList.length; k++) {
-                        const headerKey = headersList[k];
+                    if (tds) {
+                      for (let idx = 0; idx < tds.length; idx++) {
+                        const headerKey = indexToKey[idx];
                         if (!headerKey) continue;
-                        const cellIndex = k + 2;
-                        if (tds && tds.length > cellIndex) {
-                          const cell = tds[cellIndex];
-                          if (cell) {
-                            let val = cell.textContent?.trim() || "0";
-                            if (cell.classList.contains("hidden")) {
-                              val = "0";
-                            }
-                            villageData[headerKey] = val;
-                          } else {
-                            villageData[headerKey] = "0";
-                          }
-                        } else {
-                          villageData[headerKey] = "0";
+                        const cell = tds[idx];
+                        if (!cell) continue;
+                        let val = cell.textContent?.trim() || "0";
+                        if (cell.classList.contains("hidden")) {
+                          val = "0";
+                        }
+                        villageData[headerKey] = val;
+                      }
+                    }
+                    for (let k = 0; k < headersList.length; k++) {
+                      const headerKey = headersList[k];
+                      if (!headerKey || villageData[headerKey] !== void 0) continue;
+                      const cellIndex = k + 2;
+                      let value = "0";
+                      if (tds && tds.length > cellIndex) {
+                        const cell = tds[cellIndex];
+                        if (cell && !cell.classList.contains("hidden")) {
+                          value = cell.textContent?.trim() || "0";
                         }
                       }
-                    } else {
-                      for (let k = 0; k < headersList.length; k++) {
-                        const headerKey = headersList[k];
-                        if (!headerKey) continue;
-                        const cellIndex = k + 2;
-                        let unitData = "0";
-                        if (tds && tds.length > cellIndex) {
-                          const cell = tds[cellIndex];
-                          if (cell && !cell.classList.contains("hidden")) {
-                            unitData = cell.textContent?.trim() || "0";
-                          }
-                        }
-                        villageData[headerKey] = unitData;
-                      }
+                      villageData[headerKey] = value;
                     }
                     let passedFilter = true;
                     for (const key in this.filters) {
