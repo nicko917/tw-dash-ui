@@ -349,29 +349,24 @@ export class Dashboard {
             return this.unitIconTemplate;
         }
 
+        let template: { prefix: string; suffix: string } | null = null;
         const anyUnitIcon = document.querySelector<HTMLImageElement>('img[src*="/graphic/unit/unit_"]');
-        if (!anyUnitIcon || !anyUnitIcon.src) {
-            this.unitIconTemplateResolved = true;
-            this.unitIconTemplate = null;
-            return null;
+        if (anyUnitIcon && anyUnitIcon.src) {
+            const match = anyUnitIcon.src.match(/^(.*\/unit_)\w+(\.(?:webp|png|gif))(?:\?.*)?$/i);
+            if (match) {
+                const prefix = match[1];
+                const suffix = match[2];
+                if (prefix && suffix) {
+                    template = { prefix, suffix };
+                }
+            }
         }
 
-        const match = anyUnitIcon.src.match(/^(.*\/unit_)\w+(\.(?:webp|png|gif))(?:\?.*)?$/i);
-        if (!match) {
-            this.unitIconTemplateResolved = true;
-            this.unitIconTemplate = null;
-            return null;
+        if (!template) {
+            template = { prefix: '/graphic/unit/unit_', suffix: '.webp' };
         }
 
-        const prefix = match[1];
-        const suffix = match[2];
-        if (!prefix || !suffix) {
-            this.unitIconTemplateResolved = true;
-            this.unitIconTemplate = null;
-            return null;
-        }
-
-        this.unitIconTemplate = { prefix, suffix };
+        this.unitIconTemplate = template;
         this.unitIconTemplateResolved = true;
         return this.unitIconTemplate;
     }
