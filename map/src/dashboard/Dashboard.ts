@@ -379,8 +379,17 @@ export class Dashboard {
         return aliases[unitKey] || unitKey;
     }
 
+    private isUnitKey(key: string): boolean {
+        const unitKeys = game_data.units || ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
+        return unitKeys.includes(key);
+    }
+
     private getUnitIconSrc(unitKey: string): string | null {
         const resolvedKey = this.getUnitIconKey(unitKey);
+        if (!this.isUnitKey(resolvedKey)) {
+            return null;
+        }
+
         const existingIcon = document.querySelector<HTMLImageElement>(`img[src*="unit_${resolvedKey}."]`);
         if (existingIcon && existingIcon.src) {
             return existingIcon.src;

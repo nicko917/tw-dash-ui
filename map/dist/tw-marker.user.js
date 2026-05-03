@@ -1363,8 +1363,15 @@
           };
           return aliases[unitKey] || unitKey;
         }
+        isUnitKey(key) {
+          const unitKeys = game_data.units || ["spear", "sword", "axe", "archer", "spy", "light", "marcher", "heavy", "ram", "catapult", "knight", "snob"];
+          return unitKeys.includes(key);
+        }
         getUnitIconSrc(unitKey) {
           const resolvedKey = this.getUnitIconKey(unitKey);
+          if (!this.isUnitKey(resolvedKey)) {
+            return null;
+          }
           const existingIcon = document.querySelector(`img[src*="unit_${resolvedKey}."]`);
           if (existingIcon && existingIcon.src) {
             return existingIcon.src;
