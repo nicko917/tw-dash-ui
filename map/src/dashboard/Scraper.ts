@@ -323,21 +323,31 @@ export class Scraper {
             if (!rowEl) continue;
 
             const rowHtml = rowEl.innerHTML;
-            // El patrón en el HTML es: name="player_id[2129190][id]"
-            // split("[")[1] => "2129190][id]..." → split("]")[0] => "2129190"
-            const bracketSplit = rowHtml.split("[");
-            const playerId = bracketSplit[1] ? bracketSplit[1].split("]")[0] : null;
+            // Extrae playerId desde el enlace del jugador: ...screen=info_player&id=12345
+            const playerLink = rowEl.querySelector<HTMLAnchorElement>('a[href*="screen=info_player"][href*="id="]');
+            const playerHref = playerLink?.getAttribute('href') || '';
+            const playerMatch = playerHref.match(/[?&]id=(\d+)/);
+            const playerId = playerMatch ? playerMatch[1] : null;
 
-            // La columna "Pueblos" es el 5º td.lit-item (split produce array, índice 4 es el 5º fragmento)
-            const litItemSplit = rowHtml.split('<td class="lit-item">');
-            const villageAmountCell = litItemSplit[4];
-            const villageAmountRaw = villageAmountCell
-                ? (villageAmountCell.split("</td>")[0] ?? "").trim()
-                : "1";
-            const villageAmount = parseInt(villageAmountRaw, 10) || 1;
+            // "Pueblos" suele venir en una celda lit-item; fallback a regex si cambia el layout.
+            const tds = rowEl.querySelectorAll<HTMLTableCellElement>('td');
+            let villageAmount = 1;
+            if (tds.length > 1 && tds[1]) {
+                const villageText = (tds[1].textContent || '').replace(/[^\d]/g, '').trim();
+                villageAmount = parseInt(villageText, 10) || 1;
+            } else {
+                const villagesMatch = rowHtml.match(/<td[^>]*class="[^"]*lit-item[^"]*"[^>]*>\s*(\d+)/i);
+                villageAmount = villagesMatch ? (parseInt(villagesMatch[1], 10) || 1) : 1;
+            }
 
             if (!playerId || isNaN(parseInt(playerId, 10))) {
-                console.warn(`[Scraper] Fila ${i}: no se pudo extraer playerId. HTML:`, rowHtml.substring(0, 200));
+                const secondCellText = tds.length > 1 && tds[1]
+                    ? ((tds[1].textContent || '').trim())
+                    : '';
+                console.warn(
+                    `[Scraper] Fila ${i}: no se pudo extraer playerId. href="${playerHref}", tds=${tds.length}, segundaCelda="${secondCellText}". HTML:`,
+                    rowHtml.substring(0, 200)
+                );
                 continue;
             }
 

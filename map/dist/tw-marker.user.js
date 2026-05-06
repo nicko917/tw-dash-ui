@@ -916,14 +916,25 @@
             const rowEl = rows[i];
             if (!rowEl) continue;
             const rowHtml = rowEl.innerHTML;
-            const bracketSplit = rowHtml.split("[");
-            const playerId = bracketSplit[1] ? bracketSplit[1].split("]")[0] : null;
-            const litItemSplit = rowHtml.split('<td class="lit-item">');
-            const villageAmountCell = litItemSplit[4];
-            const villageAmountRaw = villageAmountCell ? (villageAmountCell.split("</td>")[0] ?? "").trim() : "1";
-            const villageAmount = parseInt(villageAmountRaw, 10) || 1;
+            const playerLink = rowEl.querySelector('a[href*="screen=info_player"][href*="id="]');
+            const playerHref = playerLink?.getAttribute("href") || "";
+            const playerMatch = playerHref.match(/[?&]id=(\d+)/);
+            const playerId = playerMatch ? playerMatch[1] : null;
+            const tds = rowEl.querySelectorAll("td");
+            let villageAmount = 1;
+            if (tds.length > 1 && tds[1]) {
+              const villageText = (tds[1].textContent || "").replace(/[^\d]/g, "").trim();
+              villageAmount = parseInt(villageText, 10) || 1;
+            } else {
+              const villagesMatch = rowHtml.match(/<td[^>]*class="[^"]*lit-item[^"]*"[^>]*>\s*(\d+)/i);
+              villageAmount = villagesMatch ? parseInt(villagesMatch[1], 10) || 1 : 1;
+            }
             if (!playerId || isNaN(parseInt(playerId, 10))) {
-              console.warn(`[Scraper] Fila ${i}: no se pudo extraer playerId. HTML:`, rowHtml.substring(0, 200));
+              const secondCellText = tds.length > 1 && tds[1] ? (tds[1].textContent || "").trim() : "";
+              console.warn(
+                `[Scraper] Fila ${i}: no se pudo extraer playerId. href="${playerHref}", tds=${tds.length}, segundaCelda="${secondCellText}". HTML:`,
+                rowHtml.substring(0, 200)
+              );
               continue;
             }
             console.log(`[Scraper] Fila ${i} -> playerId: ${playerId}, villageAmount: ${villageAmount}`);
