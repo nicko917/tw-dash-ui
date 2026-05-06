@@ -115,7 +115,7 @@ export class Scraper {
     }
 
     private getHeaderKeyForCell(cell: HTMLTableCellElement, mode: string, headersList: string[], displayHeadersList: string[]): string | null {
-        const text = (cell.textContent || "").trim().toLowerCase();
+        const text = (cell.textContent || "").trim();
         const img = cell.querySelector('img');
         if (img && img.src) {
             const unitMatch = img.src.match(/unit_(\w+)\.(?:webp|png|gif)/i);
@@ -128,17 +128,31 @@ export class Scraper {
             }
         }
 
-        const imgTitle = img ? ((img.getAttribute('data-title') || img.getAttribute('title') || '').trim().toLowerCase()) : '';
-        const cellTitle = (cell.getAttribute('data-title') || '').trim().toLowerCase();
-        const headerText = [text, imgTitle, cellTitle].filter(Boolean).join(' ');
+        const normalizedText = this.normalizeHeaderText(text);
+        const imgTitle = img ? ((img.getAttribute('data-title') || img.getAttribute('title') || '').trim()) : '';
+        const cellTitle = (cell.getAttribute('data-title') || '').trim();
+        const normalizedImgTitle = this.normalizeHeaderText(imgTitle);
+        const normalizedCellTitle = this.normalizeHeaderText(cellTitle);
+        const headerText = [normalizedText, normalizedImgTitle, normalizedCellTitle].filter(Boolean).join(' ');
 
         for (let k = 0; k < headersList.length; k++) {
             const key = headersList[k];
-            const display = displayHeadersList[k] ? displayHeadersList[k].toLowerCase() : "";
+            const normalizedKey = this.normalizeHeaderText(key);
+            const display = displayHeadersList[k] ? this.normalizeHeaderText(displayHeadersList[k]) : "";
+
             if (display && headerText.indexOf(display) !== -1) {
                 return key;
             }
-            if (key && headerText === key.toLowerCase()) {
+            if (normalizedKey && headerText.indexOf(normalizedKey) !== -1) {
+                return key;
+            }
+            if (display && normalizedText.indexOf(display) !== -1) {
+                return key;
+            }
+            if (normalizedKey && normalizedText.indexOf(normalizedKey) !== -1) {
+                return key;
+            }
+            if (display && normalizedCellTitle.indexOf(display) !== -1) {
                 return key;
             }
         }
@@ -167,6 +181,17 @@ export class Scraper {
                 }
             });
             startRow = headerRowIndex + 1;
+        } else if (trs.length > 0) {
+            const headerCells = trs[0].querySelectorAll('th,td');
+            if (headerCells.length >= 3) {
+                headerCells.forEach((cell, idx) => {
+                    const headerKey = this.getHeaderKeyForCell(cell as HTMLTableCellElement, mode, headersList, displayHeadersList);
+                    if (headerKey) {
+                        indexToKey[idx] = headerKey;
+                    }
+                });
+                startRow = 1;
+            }
         }
 
         return { indexToKey, startRow };
@@ -179,6 +204,31 @@ export class Scraper {
                 success: (result: string) => resolve(result),
                 error: (_jqXHR: any, textStatus: string, errorThrown: string) => reject(new Error(`${textStatus} - ${errorThrown}`))
             });
+        });
+    }
+
+    private normalizeHeaderText(text: string): string {
+        return (text || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    private fetchPageHtmlWithRetry(url: string, retries = 3, delayMs = 1200): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const attempt = (remaining: number) => {
+                $.ajax({
+                    url,
+                    success: (result: string) => resolve(result),
+                    error: (jqXHR: any, textStatus: string, errorThrown: string) => {
+                        const status = jqXHR && jqXHR.status;
+                        if (remaining > 0 && (status === 429 || status === 0)) {
+                            console.warn(`[Scraper] Retry ${url} after status=${status}; remaining=${remaining}`);
+                            setTimeout(() => attempt(remaining - 1), delayMs * (4 - remaining));
+                            return;
+                        }
+                        reject(new Error(`${status || 0} ${textStatus} - ${errorThrown}`));
+                    }
+                });
+            };
+            attempt(retries);
         });
     }
 
@@ -378,96 +428,76 @@ export class Scraper {
             const url = `https://${window.location.host}/game.php?screen=ally&mode=${mode}&player_id=${currentPlayer.playerId}&page=${pageNumber}`;
             console.log(`[Scraper] [${currentIndex + 1}/${playerInfoList.length}] Fetching playerId=${currentPlayer.playerId}, página=${pageNumber} -> ${url}`);
 
-            $.ajax({
-                url: url,
-                success: (result: string) => {
-                    onProgress(currentIndex / playerInfoList.length);
+            this.fetchPageHtmlWithRetry(url).then(result => {
+                onProgress(currentIndex / playerInfoList.length);
 
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(result, "text/html");
-                    
-                    const visTables = doc.querySelectorAll('table.vis.w100');
-                    console.log(`[Scraper] playerId=${currentPlayer.playerId}: tablas 'vis w100' en respuesta: ${visTables.length}`);
-                    let dataTable: HTMLTableElement | null = null;
-                    
-                    if (visTables.length > 0) {
-                        dataTable = visTables[visTables.length - 1] as HTMLTableElement;
-                    }
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(result, "text/html");
+                
+                const visTables = doc.querySelectorAll('table.vis.w100');
+                console.log(`[Scraper] playerId=${currentPlayer.playerId}: tablas 'vis w100' en respuesta: ${visTables.length}`);
+                let dataTable: HTMLTableElement | null = null;
+                
+                if (visTables.length > 0) {
+                    dataTable = visTables[visTables.length - 1] as HTMLTableElement;
+                }
 
-                    if (!dataTable) {
-                        console.warn(`[Scraper] playerId=${currentPlayer.playerId}: no se encontró tabla de datos. Fragmento HTML:`, result.substring(0, 600));
-                    }
+                if (!dataTable) {
+                    console.warn(`[Scraper] playerId=${currentPlayer.playerId}: no se encontró tabla de datos. Fragmento HTML:`, result.substring(0, 600));
+                    currentIndex++;
+                    pageNumber = 1;
+                    setTimeout(loop, 1200);
+                    return;
+                }
 
-                    if (dataTable) {
-                        const primaryHtml = result;
-                        const buildingHtmlPromise = mode === 'members_troops'
-                            ? this.fetchPageHtml(`https://${window.location.host}/game.php?screen=ally&mode=members_buildings&player_id=${currentPlayer.playerId}&page=${pageNumber}`)
-                            : Promise.resolve('');
+                const primaryHtml = result;
+                const buildingHtmlPromise = mode === 'members_troops'
+                    ? this.fetchPageHtmlWithRetry(`https://${window.location.host}/game.php?screen=ally&mode=members_buildings&player_id=${currentPlayer.playerId}&page=${pageNumber}`)
+                    : Promise.resolve('');
 
-                        buildingHtmlPromise.then(buildingHtml => {
-                            const primaryVillages = this.parsePlayerTable(primaryHtml, mode, parsePrimaryHeaders, displayHeadersList);
-                            const buildingVillages = mode === 'members_troops'
-                                ? this.parsePlayerTable(buildingHtml, 'members_buildings', parseBuildingHeaders, parseBuildingDisplayHeaders)
-                                : [];
+                buildingHtmlPromise.then(buildingHtml => {
+                    const primaryVillages = this.parsePlayerTable(primaryHtml, mode, parsePrimaryHeaders, displayHeadersList);
+                    const buildingVillages = mode === 'members_troops'
+                        ? this.parsePlayerTable(buildingHtml, 'members_buildings', parseBuildingHeaders, parseBuildingDisplayHeaders)
+                        : [];
 
-                            const villageMap: Record<string, VillageData> = {};
+                    const villageMap: Record<string, VillageData> = {};
 
-                            primaryVillages.forEach(village => {
-                                const key = `${village.x}|${village.y}`;
-                                villageMap[key] = { ...village, values: { ...village.values } };
+                    primaryVillages.forEach(village => {
+                        const key = `${village.x}|${village.y}`;
+                        villageMap[key] = { ...village, values: { ...village.values } };
+                    });
+
+                    buildingVillages.forEach(village => {
+                        const key = `${village.x}|${village.y}`;
+                        if (!villageMap[key]) {
+                            villageMap[key] = { x: village.x, y: village.y, points: village.points || '0', values: {} };
+                        }
+                        villageMap[key].values = {
+                            ...villageMap[key].values,
+                            ...village.values,
+                        };
+                    });
+
+                    Object.values(villageMap).forEach(villageData => {
+                        const playerName = players[currentPlayer.playerId] || 'Unknown';
+                        const row = `${villageData.x}|${villageData.y},${playerName},${villageData.points},` +
+                            headersList.map(item => item ? (villageData.values[item] || '0') : '0').join(',') + '\n';
+                        console.log(`[Scraper] Fila añadida al CSV:`, row.trim());
+                        csvData += row;
+
+                        if (currentPlayerData) {
+                            currentPlayerData.villages.push({
+                                x: villageData.x ?? '0',
+                                y: villageData.y ?? '0',
+                                points: villageData.points || '0',
+                                values: headersList.reduce((acc: Record<string, string>, key) => {
+                                    acc[key] = villageData.values[key] || '0';
+                                    return acc;
+                                }, {})
                             });
-
-                            buildingVillages.forEach(village => {
-                                const key = `${village.x}|${village.y}`;
-                                if (!villageMap[key]) {
-                                    villageMap[key] = { x: village.x, y: village.y, points: village.points || '0', values: {} };
-                                }
-                                villageMap[key].values = {
-                                    ...villageMap[key].values,
-                                    ...village.values,
-                                };
-                            });
-
-                            Object.values(villageMap).forEach(villageData => {
-                                const playerName = players[currentPlayer.playerId] || 'Unknown';
-                                const row = `${villageData.x}|${villageData.y},${playerName},${villageData.points},` +
-                                    headersList.map(item => item ? (villageData.values[item] || '0') : '0').join(',') + '\n';
-                                console.log(`[Scraper] Fila añadida al CSV:`, row.trim());
-                                csvData += row;
-
-                                if (currentPlayerData) {
-                                    currentPlayerData.villages.push({
-                                        x: villageData.x ?? '0',
-                                        y: villageData.y ?? '0',
-                                        points: villageData.points || '0',
-                                        values: headersList.reduce((acc: Record<string, string>, key) => {
-                                            acc[key] = villageData.values[key] || '0';
-                                            return acc;
-                                        }, {})
-                                    });
-                                }
-                            });
-
-                            if ((currentPlayer.villageAmount / 1000) > pageNumber) {
-                                console.log(`[Scraper] playerId=${currentPlayer.playerId}: hay más páginas (villageAmount=${currentPlayer.villageAmount}), cargando página ${pageNumber + 1}`);
-                                pageNumber++;
-                            } else {
-                                currentIndex++;
-                                pageNumber = 1;
-                            }
-
-                            setTimeout(loop, 200);
-                        }).catch(error => {
-                            console.error(`[Scraper] Error al cargar página adicional para playerId=${currentPlayer.playerId}, página=${pageNumber}:`, error);
-                            if ((currentPlayer.villageAmount / 1000) > pageNumber) {
-                                pageNumber++;
-                            } else {
-                                currentIndex++;
-                                pageNumber = 1;
-                            }
-                            setTimeout(loop, 200);
-                        });
-                    }
+                        }
+                    });
 
                     if ((currentPlayer.villageAmount / 1000) > pageNumber) {
                         console.log(`[Scraper] playerId=${currentPlayer.playerId}: hay más páginas (villageAmount=${currentPlayer.villageAmount}), cargando página ${pageNumber + 1}`);
@@ -477,14 +507,18 @@ export class Scraper {
                         pageNumber = 1;
                     }
 
-                    setTimeout(loop, 200);
-                },
-                error: (_jqXHR: any, textStatus: string, errorThrown: string) => {
-                    console.error(`[Scraper] Error AJAX para playerId=${currentPlayer.playerId}, página=${pageNumber}: ${textStatus} - ${errorThrown}`);
+                    setTimeout(loop, 1200);
+                }).catch(error => {
+                    console.error(`[Scraper] Error al cargar página adicional para playerId=${currentPlayer.playerId}, página=${pageNumber}:`, error);
                     currentIndex++;
                     pageNumber = 1;
-                    setTimeout(loop, 200);
-                }
+                    setTimeout(loop, 1200);
+                });
+            }).catch(error => {
+                console.error(`[Scraper] Error AJAX para playerId=${currentPlayer.playerId}, página=${pageNumber}:`, error);
+                currentIndex++;
+                pageNumber = 1;
+                setTimeout(loop, 1200);
             });
         };
 
