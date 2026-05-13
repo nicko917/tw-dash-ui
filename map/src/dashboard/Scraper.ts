@@ -117,28 +117,28 @@ export class Scraper {
     private getHeaderKeyForCell(cell: HTMLTableCellElement, mode: string, headersList: string[], displayHeadersList: string[]): string | null {
         const text = (cell.textContent || "").trim();
         const img = cell.querySelector('img');
-        if (img && img.src) {
+        if (img?.src) {
             const unitMatch = img.src.match(/unit_(\w+)\.(?:webp|png|gif)/i);
-            if (unitMatch) {
+            if (unitMatch?.[1]) {
                 return unitMatch[1].toLowerCase();
             }
             const buildingMatch = img.src.match(/buildings\/(\w+)\.(?:webp|png|gif)/i);
-            if (buildingMatch) {
+            if (buildingMatch?.[1]) {
                 return buildingMatch[1].toLowerCase();
             }
         }
 
         const normalizedText = this.normalizeHeaderText(text);
-        const imgTitle = img ? ((img.getAttribute('data-title') || img.getAttribute('title') || '').trim()) : '';
-        const cellTitle = (cell.getAttribute('data-title') || '').trim();
+        const imgTitle = img ? ((img.getAttribute('data-title') ?? img.getAttribute('title') ?? '').trim()) : '';
+        const cellTitle = (cell.getAttribute('data-title') ?? '').trim();
         const normalizedImgTitle = this.normalizeHeaderText(imgTitle);
         const normalizedCellTitle = this.normalizeHeaderText(cellTitle);
         const headerText = [normalizedText, normalizedImgTitle, normalizedCellTitle].filter(Boolean).join(' ');
 
         for (let k = 0; k < headersList.length; k++) {
-            const key = headersList[k];
+            const key = headersList[k] ?? '';
             const normalizedKey = this.normalizeHeaderText(key);
-            const display = displayHeadersList[k] ? this.normalizeHeaderText(displayHeadersList[k]) : "";
+            const display = displayHeadersList[k] ? this.normalizeHeaderText(displayHeadersList[k]!) : "";
 
             if (display && headerText.indexOf(display) !== -1) {
                 return key;
@@ -164,7 +164,8 @@ export class Scraper {
         const trs = dataTable.querySelectorAll('tr');
         let headerRowIndex = -1;
         for (let i = 0; i < trs.length; i++) {
-            if (trs[i].querySelector('th')) {
+            const row = trs[i];
+            if (row?.querySelector('th')) {
                 headerRowIndex = i;
                 break;
             }
@@ -173,24 +174,30 @@ export class Scraper {
         const indexToKey: Record<number, string> = {};
         let startRow = 1;
         if (headerRowIndex >= 0) {
-            const headerCells = trs[headerRowIndex].querySelectorAll('th,td');
-            headerCells.forEach((cell, idx) => {
-                const headerKey = this.getHeaderKeyForCell(cell as HTMLTableCellElement, mode, headersList, displayHeadersList);
-                if (headerKey) {
-                    indexToKey[idx] = headerKey;
-                }
-            });
-            startRow = headerRowIndex + 1;
-        } else if (trs.length > 0) {
-            const headerCells = trs[0].querySelectorAll('th,td');
-            if (headerCells.length >= 3) {
+            const headerRow = trs[headerRowIndex];
+            if (headerRow) {
+                const headerCells = headerRow.querySelectorAll('th,td');
                 headerCells.forEach((cell, idx) => {
                     const headerKey = this.getHeaderKeyForCell(cell as HTMLTableCellElement, mode, headersList, displayHeadersList);
                     if (headerKey) {
                         indexToKey[idx] = headerKey;
                     }
                 });
-                startRow = 1;
+                startRow = headerRowIndex + 1;
+            }
+        } else if (trs.length > 0) {
+            const headerRow = trs[0];
+            if (headerRow) {
+                const headerCells = headerRow.querySelectorAll('th,td');
+                if (headerCells.length >= 3) {
+                    headerCells.forEach((cell, idx) => {
+                        const headerKey = this.getHeaderKeyForCell(cell as HTMLTableCellElement, mode, headersList, displayHeadersList);
+                        if (headerKey) {
+                            indexToKey[idx] = headerKey;
+                        }
+                    });
+                    startRow = 1;
+                }
             }
         }
 
@@ -243,7 +250,7 @@ export class Scraper {
         let dataTable: HTMLTableElement | null = null;
         let selectedIndex = -1;
         for (let i = 0; i < candidateTables.length; i++) {
-            const table = candidateTables[i];
+            const table = candidateTables[i]!;
             const { indexToKey } = this.buildHeaderIndexMap(table, mode, headersList, displayHeadersList);
             const mappedColumns = Object.keys(indexToKey).length;
             if (mappedColumns >= 2) {
@@ -254,7 +261,7 @@ export class Scraper {
         }
 
         if (!dataTable) {
-            dataTable = candidateTables[candidateTables.length - 1];
+            dataTable = candidateTables[candidateTables.length - 1] as HTMLTableElement;
             selectedIndex = candidateTables.length - 1;
         }
 
@@ -271,8 +278,8 @@ export class Scraper {
             const tds = row.querySelectorAll('td');
             const textContent = row.textContent || '';
             const coordMatch = textContent.match(/\((\d{1,3})\|(\d{1,3})\)/);
-            const x = coordMatch ? coordMatch[1] : '0';
-            const y = coordMatch ? coordMatch[2] : '0';
+            const x = coordMatch?.[1] ?? '0';
+            const y = coordMatch?.[2] ?? '0';
             let points = '0';
             if (tds.length >= 2 && tds[1]) {
                 points = (tds[1].textContent || '0').replace(/\./g, '').trim();
@@ -337,7 +344,8 @@ export class Scraper {
                 villageAmount = parseInt(villageText, 10) || 1;
             } else {
                 const villagesMatch = rowHtml.match(/<td[^>]*class="[^"]*lit-item[^"]*"[^>]*>\s*(\d+)/i);
-                villageAmount = villagesMatch ? (parseInt(villagesMatch[1], 10) || 1) : 1;
+                const villagesMatchValue = villagesMatch?.[1] ?? '0';
+                villageAmount = parseInt(villagesMatchValue, 10) || 1;
             }
 
             if (!playerId || isNaN(parseInt(playerId, 10))) {

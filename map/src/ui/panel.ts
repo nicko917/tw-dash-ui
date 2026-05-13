@@ -225,19 +225,9 @@ export class Panel {
         const textarea = this.element.querySelector('#bbcode_export_area') as HTMLTextAreaElement;
         textarea.style.display = 'none';
         textarea.value = '';
-        
-        const legend = document.getElementById('map_legend');
-        if (legend) {
-            const rect = legend.getBoundingClientRect();
-            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-            
-            this.element.style.top = `${rect.top + scrollTop}px`;
-            this.element.style.left = `${rect.right + scrollLeft + 15}px`;
-        } else {
-            this.element.style.left = `${x}px`;
-            this.element.style.top = `${y}px`;
-        }
+
+        this.element.style.top = '174.48px';
+        this.element.style.left = '1300.97px';
         
         this.element.style.display = 'block';
     }

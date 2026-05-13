@@ -625,17 +625,8 @@
           const textarea = this.element.querySelector("#bbcode_export_area");
           textarea.style.display = "none";
           textarea.value = "";
-          const legend = document.getElementById("map_legend");
-          if (legend) {
-            const rect = legend.getBoundingClientRect();
-            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-            this.element.style.top = `${rect.top + scrollTop}px`;
-            this.element.style.left = `${rect.right + scrollLeft + 15}px`;
-          } else {
-            this.element.style.left = `${x}px`;
-            this.element.style.top = `${y}px`;
-          }
+          this.element.style.top = "174.48px";
+          this.element.style.left = "1300.97px";
           this.element.style.display = "block";
         }
         hide() {
@@ -730,24 +721,24 @@
         getHeaderKeyForCell(cell, mode, headersList, displayHeadersList) {
           const text = (cell.textContent || "").trim();
           const img = cell.querySelector("img");
-          if (img && img.src) {
+          if (img?.src) {
             const unitMatch = img.src.match(/unit_(\w+)\.(?:webp|png|gif)/i);
-            if (unitMatch) {
+            if (unitMatch?.[1]) {
               return unitMatch[1].toLowerCase();
             }
             const buildingMatch = img.src.match(/buildings\/(\w+)\.(?:webp|png|gif)/i);
-            if (buildingMatch) {
+            if (buildingMatch?.[1]) {
               return buildingMatch[1].toLowerCase();
             }
           }
           const normalizedText = this.normalizeHeaderText(text);
-          const imgTitle = img ? (img.getAttribute("data-title") || img.getAttribute("title") || "").trim() : "";
-          const cellTitle = (cell.getAttribute("data-title") || "").trim();
+          const imgTitle = img ? (img.getAttribute("data-title") ?? img.getAttribute("title") ?? "").trim() : "";
+          const cellTitle = (cell.getAttribute("data-title") ?? "").trim();
           const normalizedImgTitle = this.normalizeHeaderText(imgTitle);
           const normalizedCellTitle = this.normalizeHeaderText(cellTitle);
           const headerText = [normalizedText, normalizedImgTitle, normalizedCellTitle].filter(Boolean).join(" ");
           for (let k = 0; k < headersList.length; k++) {
-            const key = headersList[k];
+            const key = headersList[k] ?? "";
             const normalizedKey = this.normalizeHeaderText(key);
             const display = displayHeadersList[k] ? this.normalizeHeaderText(displayHeadersList[k]) : "";
             if (display && headerText.indexOf(display) !== -1) {
@@ -772,7 +763,8 @@
           const trs = dataTable.querySelectorAll("tr");
           let headerRowIndex = -1;
           for (let i = 0; i < trs.length; i++) {
-            if (trs[i].querySelector("th")) {
+            const row = trs[i];
+            if (row?.querySelector("th")) {
               headerRowIndex = i;
               break;
             }
@@ -780,24 +772,30 @@
           const indexToKey = {};
           let startRow = 1;
           if (headerRowIndex >= 0) {
-            const headerCells = trs[headerRowIndex].querySelectorAll("th,td");
-            headerCells.forEach((cell, idx) => {
-              const headerKey = this.getHeaderKeyForCell(cell, mode, headersList, displayHeadersList);
-              if (headerKey) {
-                indexToKey[idx] = headerKey;
-              }
-            });
-            startRow = headerRowIndex + 1;
-          } else if (trs.length > 0) {
-            const headerCells = trs[0].querySelectorAll("th,td");
-            if (headerCells.length >= 3) {
+            const headerRow = trs[headerRowIndex];
+            if (headerRow) {
+              const headerCells = headerRow.querySelectorAll("th,td");
               headerCells.forEach((cell, idx) => {
                 const headerKey = this.getHeaderKeyForCell(cell, mode, headersList, displayHeadersList);
                 if (headerKey) {
                   indexToKey[idx] = headerKey;
                 }
               });
-              startRow = 1;
+              startRow = headerRowIndex + 1;
+            }
+          } else if (trs.length > 0) {
+            const headerRow = trs[0];
+            if (headerRow) {
+              const headerCells = headerRow.querySelectorAll("th,td");
+              if (headerCells.length >= 3) {
+                headerCells.forEach((cell, idx) => {
+                  const headerKey = this.getHeaderKeyForCell(cell, mode, headersList, displayHeadersList);
+                  if (headerKey) {
+                    indexToKey[idx] = headerKey;
+                  }
+                });
+                startRow = 1;
+              }
             }
           }
           return { indexToKey, startRow };
@@ -867,8 +865,8 @@
             const tds = row.querySelectorAll("td");
             const textContent = row.textContent || "";
             const coordMatch = textContent.match(/\((\d{1,3})\|(\d{1,3})\)/);
-            const x = coordMatch ? coordMatch[1] : "0";
-            const y = coordMatch ? coordMatch[2] : "0";
+            const x = coordMatch?.[1] ?? "0";
+            const y = coordMatch?.[2] ?? "0";
             let points = "0";
             if (tds.length >= 2 && tds[1]) {
               points = (tds[1].textContent || "0").replace(/\./g, "").trim();
@@ -918,7 +916,8 @@
               villageAmount = parseInt(villageText, 10) || 1;
             } else {
               const villagesMatch = rowHtml.match(/<td[^>]*class="[^"]*lit-item[^"]*"[^>]*>\s*(\d+)/i);
-              villageAmount = villagesMatch ? parseInt(villagesMatch[1], 10) || 1 : 1;
+              const villagesMatchValue = villagesMatch?.[1] ?? "0";
+              villageAmount = parseInt(villagesMatchValue, 10) || 1;
             }
             if (!playerId || isNaN(parseInt(playerId, 10))) {
               const secondCellText = tds.length > 1 && tds[1] ? (tds[1].textContent || "").trim() : "";
