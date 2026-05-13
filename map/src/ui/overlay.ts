@@ -158,12 +158,7 @@ export class Overlay {
             el.style.position = 'absolute';
             el.style.width = TWMap.tileSize[0] + 'px';
             el.style.height = TWMap.tileSize[1] + 'px';
-            el.style.display = 'flex';
-            el.style.alignItems = 'center';
-            el.style.justifyContent = 'center';
-            el.style.fontWeight = 'bold';
-            el.style.fontSize = '24px';
-            el.style.textShadow = '0px 0px 3px black';
+            el.style.display = 'block';
             el.style.zIndex = '50000';
             el.style.pointerEvents = 'none';
 
@@ -191,13 +186,9 @@ export class Overlay {
             }
 
             if (status === 'OFF') {
-                el.innerHTML = '⚔️';
-                el.style.backgroundColor = 'rgba(255, 0, 0, 0.3)';
-                el.style.border = '2px solid red';
+                el.innerHTML = '<span style="position:absolute; top:1px; right:1px; font-size:12px; line-height:1; padding:1px 2px; border-radius:3px; background:rgba(255,0,0,0.75); border:1px solid #a00; text-shadow:0 0 2px #000;">⚔️</span>';
             } else if (status === 'DEF') {
-                el.innerHTML = '🛡️';
-                el.style.backgroundColor = 'rgba(0, 0, 255, 0.3)';
-                el.style.border = '2px solid blue';
+                el.innerHTML = '<span style="position:absolute; top:1px; right:1px; font-size:12px; line-height:1; padding:1px 2px; border-radius:3px; background:rgba(0,0,255,0.75); border:1px solid #00a; text-shadow:0 0 2px #000;">🛡️</span>';
             }
         }
     }
